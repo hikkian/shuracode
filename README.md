@@ -10,6 +10,15 @@
 
 ![ShuraCode home screen](assets/screenshot-home.png)
 
+> [!NOTE]
+> **Thank you.** ShuraCode is built on other people's work:
+> [**OpenCode**](https://github.com/anomalyco/opencode) is its engine, and everything here is a layer
+> on top of it. [**thecodacus**](https://github.com/thecodacus) wrote the llama.cpp `perf` fork that runs
+> the model fast on a single GPU, and his [understory](https://github.com/thecodacus/understory) inspired
+> the permanent memory. **peculiar-ragdoll** made Tiel-Coder. The browser and web search tools come from
+> [Playwright MCP](https://github.com/microsoft/playwright-mcp), [SearXNG](https://github.com/searxng/searxng)
+> and [mcp-searxng](https://github.com/ihor-sokoliuk/mcp-searxng).
+
 ShuraCode is the coding agent of [Shura](https://github.com/hikkian/shura), which runs Tiel-Coder 35B on
 your own GPU. Everything runs on your machine: the model, the agent, and its memory.
 

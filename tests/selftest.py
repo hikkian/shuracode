@@ -73,6 +73,7 @@ def identity_check():
     results = {
         "system prompt reached the model": bool(system),
         "agent introduces itself as ShuraCode": "You are ShuraCode" in system,
+        "and names the model it runs on": bool(re.search(r"You are ShuraCode, running fully locally on the \S", system)),
         "no 'You are opencode'": bool(system) and not re.search(r"You are opencode\b", system),
     }
     for name, ok in results.items():
