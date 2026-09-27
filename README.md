@@ -6,6 +6,8 @@
 
 **A private, local AI coding agent for the terminal, with a memory that lasts across sessions.**
 
+English · [Русский](README.ru.md)
+
 </div>
 
 ![ShuraCode home screen](assets/screenshot-home.png)
@@ -49,7 +51,7 @@ Because nothing inside the engine is modified, engine updates keep ShuraCode's l
 `shuracode update` installs the new engine next to the current one and runs a self-test on it:
 
 - the logo, footer and window title are drawn;
-- the agent still introduces itself as ShuraCode.
+- the agent still introduces itself as ShuraCode and names the model it runs on.
 
 It switches to the new engine only if every check passes. If a check fails, you stay on the current
 version. `shuracode rollback` returns to the previous one.
