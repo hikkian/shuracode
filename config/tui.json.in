@@ -1,0 +1,5 @@
+{
+  "theme": "shura",
+  "plugin": [["@REPO_DIR@/plugin/shuracode.tsx", { "gateway": "@STATUS_URL@" }]],
+  "plugin_enabled": { "internal:home-tips": false }
+}

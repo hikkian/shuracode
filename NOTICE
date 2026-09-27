@@ -1,0 +1,4 @@
+ShuraCode uses OpenCode (https://github.com/anomalyco/opencode) as its engine. OpenCode is installed from npm
+at install time and is not included in this repository.
+
+OpenCode is distributed under the MIT License, Copyright (c) 2025 opencode.
