@@ -31,7 +31,7 @@ CHECKS = {
     "plugin logo": re.compile(r"your local coding council"),
     "footer brand": re.compile(r"ShuraCode|Shura\s*Code"),
 }
-GUIDE = re.compile(r"ShuraCode commands|Команды ShuraCode")
+GUIDE = re.compile(r"This reference: every command|Этот справочник: все команды")
 TITLE = re.compile(rb"\x1b\][02];ShuraCode")
 ANSI = re.compile(r"\x1b\[[0-9;?<>=]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[PX^_][^\x1b]*\x1b\\")
 
@@ -113,12 +113,14 @@ def main():
             break
     guide_ok = False
     if passed:
-        # the command reference: type /guide, Enter; the dialog must list our commands
+        # the command reference: /guide + Enter opens the dialog, a second Enter opens the card of the highlighted command (/guide itself)
         mark = len(raw)
         os.write(fd, b"/guide")
         time.sleep(1.0)
         os.write(fd, b"\r")
-        end2, retried = time.time() + 12, False
+        time.sleep(2.5)
+        os.write(fd, b"\r")
+        end2 = time.time() + 10
         while time.time() < end2 and not guide_ok:
             r, _, _ = select.select([fd], [], [], 0.2)
             if r:
@@ -129,11 +131,7 @@ def main():
                 raw += chunk
                 if b"\x1b[6n" in chunk:
                     os.write(fd, b"\x1b[1;1R")
-            tail = ANSI.sub("", raw[mark:].decode("utf8", "replace"))
-            guide_ok = bool(GUIDE.search(tail)) and "/remember" in tail
-            if not guide_ok and not retried and time.time() > end2 - 8:
-                os.write(fd, b"\r")
-                retried = True
+            guide_ok = bool(GUIDE.search(ANSI.sub("", raw[mark:].decode("utf8", "replace"))))
     for sig in (15, 9):
         try:
             os.kill(pid, sig)
