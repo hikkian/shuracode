@@ -1,5 +1,4 @@
 """The command reference (/guide, docs/commands.json, docs/COMMANDS.md) must not drift from the code."""
-import json
 import re
 import subprocess
 import sys
