@@ -1,0 +1,374 @@
+{
+ "version": 1,
+ "items": [
+  {
+   "id": "remember",
+   "name": "/remember",
+   "category": "Memory",
+   "en": "Save something to Shura's permanent memory (or the most useful thing learned in this chat).",
+   "ru": "Сохранить что-то в постоянную память Shura (или самое полезное, что выяснилось в этом чате).",
+   "source": "shuracode",
+   "example": "/remember I prefer small, focused commits"
+  },
+  {
+   "id": "forget",
+   "name": "/forget",
+   "category": "Memory",
+   "en": "Remove a memory.",
+   "ru": "Удалить запись из памяти.",
+   "source": "shuracode"
+  },
+  {
+   "id": "memory",
+   "name": "/memory",
+   "category": "Memory",
+   "en": "Show what ShuraCode remembers about you and your projects.",
+   "ru": "Показать, что ShuraCode помнит о тебе и твоих проектах.",
+   "source": "shuracode"
+  },
+  {
+   "id": "test",
+   "name": "/test",
+   "category": "Work",
+   "en": "Run the project's tests and fix what fails.",
+   "ru": "Запустить тесты проекта и починить то, что падает.",
+   "source": "shuracode"
+  },
+  {
+   "id": "commit",
+   "name": "/commit",
+   "category": "Work",
+   "en": "Write a commit in your repository's style. It never pushes.",
+   "ru": "Написать коммит в стиле твоего репозитория. Никогда не пушит.",
+   "source": "shuracode"
+  },
+  {
+   "id": "terse-on",
+   "name": "/terse-on",
+   "category": "Model",
+   "en": "Turn on the model's built-in 'short answers' prompt. Tiel-Coder only. The next reply reads the whole context again (slow once in a long session).",
+   "ru": "Включить встроенный режим коротких ответов модели. Только у Tiel-Coder. Следующий ответ заново читает весь контекст (один раз медленно в длинной сессии).",
+   "source": "shuracode",
+   "models": [
+    "tiel-coder"
+   ]
+  },
+  {
+   "id": "terse-off",
+   "name": "/terse-off",
+   "category": "Model",
+   "en": "Turn the short-answers prompt off (full-length answers). Tiel-Coder only. Re-reads the context once.",
+   "ru": "Выключить режим коротких ответов (полные ответы). Только у Tiel-Coder. Один раз заново читает контекст.",
+   "source": "shuracode",
+   "models": [
+    "tiel-coder"
+   ]
+  },
+  {
+   "id": "guide",
+   "name": "/guide",
+   "category": "Help",
+   "en": "This reference: every command, what it does and where it works.",
+   "ru": "Этот справочник: все команды, что они делают и где работают.",
+   "source": "shuracode"
+  },
+  {
+   "id": "models",
+   "name": "/models",
+   "category": "Model",
+   "en": "List the models and switch between them (Tiel-Coder and Occamy).",
+   "ru": "Список моделей и переключение между ними (Tiel-Coder и Occamy).",
+   "source": "engine",
+   "key": "ctrl+x m"
+  },
+  {
+   "id": "new",
+   "name": "/new",
+   "category": "Session",
+   "en": "Start a new session.",
+   "ru": "Начать новую сессию.",
+   "source": "engine",
+   "key": "ctrl+x n"
+  },
+  {
+   "id": "sessions",
+   "name": "/sessions",
+   "category": "Session",
+   "en": "List and switch between sessions.",
+   "ru": "Список сессий и переключение между ними.",
+   "source": "engine",
+   "key": "ctrl+x l"
+  },
+  {
+   "id": "compact",
+   "name": "/compact",
+   "category": "Session",
+   "en": "Compact the current session (summarise the history to free context).",
+   "ru": "Сжать текущую сессию (сделать краткую сводку истории, чтобы освободить контекст).",
+   "source": "engine",
+   "key": "ctrl+x c"
+  },
+  {
+   "id": "undo",
+   "name": "/undo",
+   "category": "Session",
+   "en": "Undo the last message and its file changes.",
+   "ru": "Отменить последнее сообщение и его изменения файлов.",
+   "source": "engine",
+   "key": "ctrl+x u"
+  },
+  {
+   "id": "redo",
+   "name": "/redo",
+   "category": "Session",
+   "en": "Redo a message you undid.",
+   "ru": "Вернуть отменённое сообщение.",
+   "source": "engine",
+   "key": "ctrl+x r"
+  },
+  {
+   "id": "review",
+   "name": "/review",
+   "category": "Work",
+   "en": "Review your uncommitted changes.",
+   "ru": "Проверить твои незакоммиченные изменения (ревью).",
+   "source": "engine"
+  },
+  {
+   "id": "init",
+   "name": "/init",
+   "category": "Work",
+   "en": "Guided setup of the project's AGENTS.md.",
+   "ru": "Пошаговое создание файла AGENTS.md проекта.",
+   "source": "engine"
+  },
+  {
+   "id": "details",
+   "name": "/details",
+   "category": "View",
+   "en": "Toggle the details of tool calls.",
+   "ru": "Показать или скрыть подробности вызовов инструментов.",
+   "source": "engine"
+  },
+  {
+   "id": "thinking",
+   "name": "/thinking",
+   "category": "View",
+   "en": "Toggle the visibility of the model's thinking blocks.",
+   "ru": "Показать или скрыть блоки рассуждений модели.",
+   "source": "engine"
+  },
+  {
+   "id": "themes",
+   "name": "/themes",
+   "category": "View",
+   "en": "List themes and switch.",
+   "ru": "Список тем оформления и переключение.",
+   "source": "engine",
+   "key": "ctrl+x t"
+  },
+  {
+   "id": "editor",
+   "name": "/editor",
+   "category": "Input",
+   "en": "Open your external editor to compose a message.",
+   "ru": "Открыть внешний редактор, чтобы написать сообщение.",
+   "source": "engine",
+   "key": "ctrl+x e"
+  },
+  {
+   "id": "export",
+   "name": "/export",
+   "category": "Session",
+   "en": "Export the conversation to Markdown.",
+   "ru": "Выгрузить разговор в Markdown.",
+   "source": "engine",
+   "key": "ctrl+x x"
+  },
+  {
+   "id": "share",
+   "name": "/share",
+   "category": "Session",
+   "en": "Share the current session (needs an online share service; off in ShuraCode by default).",
+   "ru": "Поделиться сессией (нужен онлайн-сервис; в ShuraCode по умолчанию выключено).",
+   "source": "engine"
+  },
+  {
+   "id": "unshare",
+   "name": "/unshare",
+   "category": "Session",
+   "en": "Stop sharing the current session.",
+   "ru": "Перестать делиться сессией.",
+   "source": "engine"
+  },
+  {
+   "id": "connect",
+   "name": "/connect",
+   "category": "Model",
+   "en": "Add a provider with API keys (not needed for the local models).",
+   "ru": "Добавить провайдера с ключом API (для локальных моделей не нужно).",
+   "source": "engine"
+  },
+  {
+   "id": "help",
+   "name": "/help",
+   "category": "Help",
+   "en": "The engine's own help dialog (key bindings).",
+   "ru": "Встроенная справка движка (сочетания клавиш).",
+   "source": "engine"
+  },
+  {
+   "id": "exit",
+   "name": "/exit",
+   "category": "Session",
+   "en": "Quit ShuraCode.",
+   "ru": "Выйти из ShuraCode.",
+   "source": "engine",
+   "key": "ctrl+x q"
+  },
+  {
+   "id": "shell",
+   "name": "!command",
+   "category": "Input",
+   "en": "Run a shell command from the prompt, for example !git status.",
+   "ru": "Выполнить команду оболочки прямо из строки ввода, например !git status.",
+   "source": "engine",
+   "kind": "syntax"
+  },
+  {
+   "id": "file",
+   "name": "@file",
+   "category": "Input",
+   "en": "Add a file to your message (fuzzy search as you type).",
+   "ru": "Добавить файл в сообщение (нечёткий поиск по мере набора).",
+   "source": "engine",
+   "kind": "syntax"
+  },
+  {
+   "id": "palette",
+   "name": "Ctrl+P",
+   "category": "Input",
+   "en": "Open the command palette: every command with its key.",
+   "ru": "Открыть палитру команд: все команды с их клавишами.",
+   "source": "engine",
+   "kind": "key"
+  },
+  {
+   "id": "leader",
+   "name": "Ctrl+X",
+   "category": "Input",
+   "en": "The leader key: press it, then a letter (the keys listed next to the commands).",
+   "ru": "Ведущая клавиша: нажми её, потом букву (клавиши указаны рядом с командами).",
+   "source": "engine",
+   "kind": "key"
+  },
+  {
+   "id": "tab",
+   "name": "Tab",
+   "category": "Work",
+   "en": "Switch Build and Plan; Plan only reads and proposes.",
+   "ru": "Переключить Build и Plan; Plan только читает и предлагает.",
+   "source": "engine",
+   "kind": "key"
+  },
+  {
+   "id": "cli-shura",
+   "name": "shura",
+   "category": "Shura (terminal)",
+   "en": "Start ShuraCode (starts the gateway and warms the model).",
+   "ru": "Запустить ShuraCode (поднимает шлюз и прогревает модель).",
+   "source": "shura",
+   "kind": "cli"
+  },
+  {
+   "id": "cli-status",
+   "name": "shura status",
+   "category": "Shura (terminal)",
+   "en": "Model state, memory, VRAM.",
+   "ru": "Состояние модели, памяти и видеопамяти.",
+   "source": "shura",
+   "kind": "cli"
+  },
+  {
+   "id": "cli-warm",
+   "name": "shura warm",
+   "category": "Shura (terminal)",
+   "en": "Load the model now.",
+   "ru": "Загрузить модель сейчас.",
+   "source": "shura",
+   "kind": "cli"
+  },
+  {
+   "id": "cli-unload",
+   "name": "shura unload",
+   "category": "Shura (terminal)",
+   "en": "Free RAM and VRAM right away.",
+   "ru": "Сразу освободить RAM и видеопамять.",
+   "source": "shura",
+   "kind": "cli"
+  },
+  {
+   "id": "cli-off",
+   "name": "shura off",
+   "category": "Shura (terminal)",
+   "en": "Switch the AI off (it will not load until `shura on`).",
+   "ru": "Выключить ИИ (не загрузится до `shura on`).",
+   "source": "shura",
+   "kind": "cli"
+  },
+  {
+   "id": "cli-on",
+   "name": "shura on",
+   "category": "Shura (terminal)",
+   "en": "Switch the AI back on.",
+   "ru": "Снова включить ИИ.",
+   "source": "shura",
+   "kind": "cli"
+  },
+  {
+   "id": "cli-pause",
+   "name": "shura pause / resume",
+   "category": "Shura (terminal)",
+   "en": "Game mode by hand: park the model, or bring it back (only when game mode is enabled).",
+   "ru": "Режим игры вручную: поставить модель на паузу или вернуть (только если режим игры включён).",
+   "source": "shura",
+   "kind": "cli"
+  },
+  {
+   "id": "cli-logs",
+   "name": "shura logs",
+   "category": "Shura (terminal)",
+   "en": "Follow the gateway log.",
+   "ru": "Смотреть журнал шлюза.",
+   "source": "shura",
+   "kind": "cli"
+  },
+  {
+   "id": "cli-restart",
+   "name": "shura restart",
+   "category": "Shura (terminal)",
+   "en": "Restart the gateway.",
+   "ru": "Перезапустить шлюз.",
+   "source": "shura",
+   "kind": "cli"
+  },
+  {
+   "id": "cli-check",
+   "name": "shura check / report",
+   "category": "Shura (terminal)",
+   "en": "Check what fits your hardware, and make a report to share.",
+   "ru": "Проверить, что подходит твоему железу, и собрать отчёт, чтобы им поделиться.",
+   "source": "shura",
+   "kind": "cli"
+  },
+  {
+   "id": "cli-install",
+   "name": "shura install / uninstall / start / stop",
+   "category": "Shura (terminal)",
+   "en": "Install or remove the engine and model, start or stop it (the universal installer).",
+   "ru": "Установить или удалить движок и модель, запустить или остановить (универсальный установщик).",
+   "source": "shura",
+   "kind": "cli"
+  }
+ ]
+}

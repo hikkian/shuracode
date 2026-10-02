@@ -31,6 +31,7 @@ CHECKS = {
     "plugin logo": re.compile(r"your local coding council"),
     "footer brand": re.compile(r"ShuraCode|Shura\s*Code"),
 }
+GUIDE = re.compile(r"ShuraCode commands|Команды ShuraCode")
 TITLE = re.compile(rb"\x1b\][02];ShuraCode")
 ANSI = re.compile(r"\x1b\[[0-9;?<>=]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[PX^_][^\x1b]*\x1b\\")
 
@@ -110,6 +111,29 @@ def main():
         if all(p.search(text) for p in CHECKS.values()) and TITLE.search(raw):
             passed = True
             break
+    guide_ok = False
+    if passed:
+        # the command reference: type /guide, Enter; the dialog must list our commands
+        mark = len(raw)
+        os.write(fd, b"/guide")
+        time.sleep(1.0)
+        os.write(fd, b"\r")
+        end2, retried = time.time() + 12, False
+        while time.time() < end2 and not guide_ok:
+            r, _, _ = select.select([fd], [], [], 0.2)
+            if r:
+                try:
+                    chunk = os.read(fd, 65536)
+                except OSError:
+                    break
+                raw += chunk
+                if b"\x1b[6n" in chunk:
+                    os.write(fd, b"\x1b[1;1R")
+            tail = ANSI.sub("", raw[mark:].decode("utf8", "replace"))
+            guide_ok = bool(GUIDE.search(tail)) and "/remember" in tail
+            if not guide_ok and not retried and time.time() > end2 - 8:
+                os.write(fd, b"\r")
+                retried = True
     for sig in (15, 9):
         try:
             os.kill(pid, sig)
@@ -121,8 +145,9 @@ def main():
     for name, pattern in CHECKS.items():
         print(f"  {'ok  ' if pattern.search(text) else 'FAIL'} {name}")
     print(f"  {'ok  ' if TITLE.search(raw) else 'FAIL'} window title")
+    print(f"  {'ok  ' if guide_ok else 'FAIL'} /guide opens the command reference")
     identity = identity_check()
-    sys.exit(0 if passed and identity else 1)
+    sys.exit(0 if passed and guide_ok and identity else 1)
 
 
 if __name__ == "__main__":
