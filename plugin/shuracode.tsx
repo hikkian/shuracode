@@ -74,7 +74,7 @@ function Logo(props: { api: TuiPluginApi }) {
 }
 
 // ------------------------------------------------------------------------------------------ live status
-type Model = { state: "ready" | "loading" | "sleeping" | "off" | "offline" | "none"; detail: string }
+type Model = { state: "ready" | "loading" | "sleeping" | "off" | "offline" | "none"; detail: string; terse?: boolean }
 // detail: the model name when ready/loading, otherwise a hint
 
 function watchModel(url: string) {
@@ -86,10 +86,11 @@ function watchModel(url: string) {
       const s = (await res.json()) as Record<string, any>
       const name = String(s.model || "model")
       const status = String(s.status ?? "").toUpperCase()
-      if (s.override === "OFF") setModel({ state: "off", detail: "disabled (shura on)" })
-      else if (status === "READY") setModel({ state: "ready", detail: name })
-      else if (status === "LOADING" || status === "STARTING") setModel({ state: "loading", detail: name })
-      else setModel({ state: "sleeping", detail: "loads on first message" })
+      const terse = typeof s.terse === "boolean" ? s.terse : undefined
+      if (s.override === "OFF") setModel({ state: "off", detail: "disabled (shura on)", terse })
+      else if (status === "READY") setModel({ state: "ready", detail: name, terse })
+      else if (status === "LOADING" || status === "STARTING") setModel({ state: "loading", detail: name, terse })
+      else setModel({ state: "sleeping", detail: "loads on first message", terse })
     } catch {
       setModel({ state: "offline", detail: "gateway not running" })
     }
@@ -117,7 +118,7 @@ function ModelBadge(props: { api: TuiPluginApi; model: () => Model; compact?: bo
   const look = createMemo(() => {
     const t = theme()
     switch (props.model().state) {
-      case "ready": return { dot: "●", fg: t.success, label: `${props.model().detail} ready` }
+      case "ready": return { dot: "●", fg: t.success, label: `${props.model().detail} ready${props.model().terse ? " · terse" : ""}` }
       case "loading": return { dot: "◐", fg: t.warning, label: `${props.model().detail} loading` }
       case "sleeping": return { dot: "○", fg: t.textMuted, label: "model asleep" }
       case "off": return { dot: "○", fg: t.warning, label: "model off" }
@@ -192,6 +193,47 @@ const tui: TuiPlugin = async (api, options) => {
       api.renderer.setTerminalTitle(title)
     })
   })
+
+  // /terse: the model's built-in "be concise" system prompt, on or off. It sits at the very start of the prompt, so the
+  // next reply reads the whole context again (a few minutes at 187k, unnoticeable in a short chat).
+  const guardianBase = (() => {
+    try {
+      return new URL(gateway).origin + "/guardian/"
+    } catch {
+      return ""
+    }
+  })()
+  const setTerse = async (on: boolean) => {
+    try {
+      const res = await fetch(guardianBase + (on ? "terse-on" : "terse-off"), { method: "POST", signal: AbortSignal.timeout(3000) })
+      if (!res.ok) throw new Error(String(res.status))
+      api.ui.toast({
+        variant: "info",
+        title: on ? "Terse mode on" : "Terse mode off",
+        message: "The next reply reads the whole context again (slow once in a long session).",
+      })
+    } catch {
+      api.ui.toast({ variant: "error", message: "Could not reach the gateway; terse mode unchanged." })
+    }
+  }
+  api.command?.register(() => [
+    {
+      title: "Terse mode: on",
+      value: "shuracode.terse.on",
+      description: "short answers (the model's built-in concise prompt)",
+      category: "ShuraCode",
+      slash: { name: "terse-on" },
+      onSelect: () => void setTerse(true),
+    },
+    {
+      title: "Terse mode: off",
+      value: "shuracode.terse.off",
+      description: "full-length answers",
+      category: "ShuraCode",
+      slash: { name: "terse-off" },
+      onSelect: () => void setTerse(false),
+    },
+  ])
 
   api.slots.register({
     order: 50,
