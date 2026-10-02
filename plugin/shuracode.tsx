@@ -74,7 +74,7 @@ function Logo(props: { api: TuiPluginApi }) {
 }
 
 // ------------------------------------------------------------------------------------------ live status
-type Model = { state: "ready" | "loading" | "sleeping" | "off" | "offline" | "none"; detail: string; terse?: boolean }
+type Model = { state: "ready" | "loading" | "sleeping" | "off" | "offline" | "none"; detail: string; terse?: boolean; terseSupported?: boolean }
 // detail: the model name when ready/loading, otherwise a hint
 
 function watchModel(url: string) {
@@ -87,10 +87,12 @@ function watchModel(url: string) {
       const name = String(s.model || "model")
       const status = String(s.status ?? "").toUpperCase()
       const terse = typeof s.terse === "boolean" ? s.terse : undefined
-      if (s.override === "OFF") setModel({ state: "off", detail: "disabled (shura on)", terse })
-      else if (status === "READY") setModel({ state: "ready", detail: name, terse })
-      else if (status === "LOADING" || status === "STARTING") setModel({ state: "loading", detail: name, terse })
-      else setModel({ state: "sleeping", detail: "loads on first message", terse })
+      // only some models (Tiel-Coder) have the terse prompt; an older gateway does not say, so assume yes there
+      const terseSupported = typeof s.terse_supported === "boolean" ? s.terse_supported : true
+      if (s.override === "OFF") setModel({ state: "off", detail: "disabled (shura on)", terse, terseSupported })
+      else if (status === "READY") setModel({ state: "ready", detail: name, terse, terseSupported })
+      else if (status === "LOADING" || status === "STARTING") setModel({ state: "loading", detail: name, terse, terseSupported })
+      else setModel({ state: "sleeping", detail: "loads on first message", terse, terseSupported })
     } catch {
       setModel({ state: "offline", detail: "gateway not running" })
     }
@@ -118,7 +120,7 @@ function ModelBadge(props: { api: TuiPluginApi; model: () => Model; compact?: bo
   const look = createMemo(() => {
     const t = theme()
     switch (props.model().state) {
-      case "ready": return { dot: "●", fg: t.success, label: `${props.model().detail} ready${props.model().terse ? " · terse" : ""}` }
+      case "ready": return { dot: "●", fg: t.success, label: `${props.model().detail} ready${props.model().terse && props.model().terseSupported !== false ? " · terse" : ""}` }
       case "loading": return { dot: "◐", fg: t.warning, label: `${props.model().detail} loading` }
       case "sleeping": return { dot: "○", fg: t.textMuted, label: "model asleep" }
       case "off": return { dot: "○", fg: t.warning, label: "model off" }
@@ -204,6 +206,10 @@ const tui: TuiPlugin = async (api, options) => {
     }
   })()
   const setTerse = async (on: boolean) => {
+    if (model().terseSupported === false) {
+      api.ui.toast({ variant: "warning", message: "Terse mode exists only for Tiel-Coder; the model in use does not have it." })
+      return
+    }
     try {
       const res = await fetch(guardianBase + (on ? "terse-on" : "terse-off"), { method: "POST", signal: AbortSignal.timeout(3000) })
       if (!res.ok) throw new Error(String(res.status))
@@ -222,6 +228,8 @@ const tui: TuiPlugin = async (api, options) => {
       value: "shuracode.terse.on",
       description: "short answers (the model's built-in concise prompt)",
       category: "ShuraCode",
+      enabled: model().terseSupported !== false,
+      hidden: model().terseSupported === false,
       slash: { name: "terse-on" },
       onSelect: () => void setTerse(true),
     },
@@ -230,6 +238,8 @@ const tui: TuiPlugin = async (api, options) => {
       value: "shuracode.terse.off",
       description: "full-length answers",
       category: "ShuraCode",
+      enabled: model().terseSupported !== false,
+      hidden: model().terseSupported === false,
       slash: { name: "terse-off" },
       onSelect: () => void setTerse(false),
     },
