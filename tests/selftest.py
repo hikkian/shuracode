@@ -82,6 +82,25 @@ def identity_check():
     return all(results.values())
 
 
+def launcher_output_limit_check():
+    """Verify engine_env passes the intended output ceiling without an installed engine."""
+    with tempfile.TemporaryDirectory(prefix="shuracode-env-selftest-") as tmp:
+        root=Path(tmp)
+        fake=root/"fake-engine"
+        fake.write_text("#!/usr/bin/env python3\nimport os\nprint(os.environ.get('OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX', 'missing'))\n",encoding="utf-8")
+        fake.chmod(0o755)
+        env={**os.environ,"SHURACODE_ENGINE":str(fake),"SHURACODE_HOME":str(root/"home"),
+             "SHURACODE_CONFIG_DIR":str(root/"config")}
+        try:
+            result=subprocess.run([str(LAUNCHER),"env-probe"],env=env,text=True,capture_output=True,timeout=5)
+        except (OSError,subprocess.TimeoutExpired):
+            passed=False
+        else:
+            passed=result.returncode==0 and result.stdout.strip()=="32768"
+        print(f"  {'ok  ' if passed else 'FAIL'} launcher exports 32768 output-token ceiling")
+        return passed
+
+
 def main():
     timeout = float(sys.argv[sys.argv.index("--timeout") + 1]) if "--timeout" in sys.argv else 25.0
     workdir = tempfile.mkdtemp(prefix="shuracode-selftest-")
@@ -145,7 +164,8 @@ def main():
     print(f"  {'ok  ' if TITLE.search(raw) else 'FAIL'} window title")
     print(f"  {'ok  ' if guide_ok else 'FAIL'} /guide opens the command reference")
     identity = identity_check()
-    sys.exit(0 if passed and guide_ok and identity else 1)
+    output_limit = launcher_output_limit_check()
+    sys.exit(0 if passed and guide_ok and identity and output_limit else 1)
 
 
 if __name__ == "__main__":

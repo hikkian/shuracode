@@ -23,6 +23,8 @@ engine_env() {
   # Offline and private: no update checks, no sharing, no model catalogue downloads, no bundled cloud plugins.
   export OPENCODE_DISABLE_AUTOUPDATE=1 OPENCODE_DISABLE_SHARE=1 OPENCODE_DISABLE_MODELS_FETCH=1 \
     OPENCODE_DISABLE_DEFAULT_PLUGINS=1
+  # Allow the local models' configured 32k output ceiling in the OpenCode engine.
+  export OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=32768
   # The plugin sets the window title itself ("ShuraCode · <session>").
   export OPENCODE_DISABLE_TERMINAL_TITLE=1
   # Do not pick up another agent's global rules and skills (~/.claude/CLAUDE.md, ~/.claude/skills).

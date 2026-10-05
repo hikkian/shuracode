@@ -52,9 +52,14 @@ Because nothing inside the engine is modified, engine updates keep ShuraCode's l
 
 - the logo, footer and window title are drawn;
 - the agent still introduces itself as ShuraCode and names the model it runs on.
+- the launcher passes the 32,768-token experimental output ceiling to the engine.
 
 It switches to the new engine only if every check passes. If a check fails, you stay on the current
 version. `shuracode rollback` returns to the previous one.
+
+The engine-wide ceiling is not the per-model output limit: each provider entry's `limit.output` can
+still impose a lower limit. The shipped model template currently sets 16,384 for each model. See
+[operations and limits](docs/OPERATIONS.md) before raising it.
 
 ## Install
 
@@ -69,6 +74,10 @@ shuracode doctor                  # check everything
 Requirements: Linux x86_64, Node.js 18+, Python 3.10+, and an OpenAI-compatible model endpoint. The
 default endpoint is the Shura gateway at `http://127.0.0.1:8080/v1`. Point ShuraCode at another one with
 `./install.sh --base-url URL --status-url ""`.
+
+## Operations
+
+See [public benchmark instructions and the Shura Monitor page](docs/OPERATIONS.md).
 
 ## Usage
 

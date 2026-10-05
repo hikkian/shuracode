@@ -8,6 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import build_commands  # noqa: E402
+sys.path.insert(0, str(ROOT / "tests"))
+import selftest  # noqa: E402
 
 
 class CommandReference(unittest.TestCase):
@@ -59,6 +61,9 @@ class CommandReference(unittest.TestCase):
         items = {i["id"]: i for i in build_commands.build()["items"]}
         for k in ("terse-on", "terse-off"):
             self.assertEqual(items[k].get("models"), ["tiel-coder"])
+
+    def test_launcher_exports_output_limit(self):
+        self.assertTrue(selftest.launcher_output_limit_check())
 
 
 if __name__ == "__main__":
