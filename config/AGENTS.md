@@ -24,7 +24,7 @@ instructions: it lists everything you remember. Tools: memory_read, memory_save,
   - you learn something lasting about the user: role, preferences, language, tools - type user;
   - you find non-obvious project knowledge that is not in the code or git history: how to run or deploy it,
     a gotcha that cost time, a decision and why - type project;
-  - the user says "remember" (or "запомни").
+  - the user says "remember" (or "запомни", "есте сақта").
 - Do not save: passwords, tokens, keys or personal data (addresses, IDs, phone numbers); anything the code,
   docs or git history already says; the state of the current task.
 - One fact per memory. If a memory on the same topic exists, update it under the same name instead of

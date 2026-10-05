@@ -6,7 +6,7 @@
 
 **A private, local AI coding agent for the terminal, with a memory that lasts across sessions.**
 
-English · [Русский](README.ru.md)
+English · [Русский](README.ru.md) · [Қазақша](README.kz.md)
 
 </div>
 
@@ -28,7 +28,7 @@ your own GPU. Everything runs on your machine: the model, the agent, and its mem
   are plain markdown files you can read, edit and delete.
 - **Two modes.** **Build** makes changes. **Plan** only reads and proposes, and a shell redirect cannot
   slip a write past it. Press Tab to switch.
-- **Commands.** `/remember`, `/forget`, `/memory`, `/test`, `/commit`, `/review`, and `/guide`: the full list of commands and keys, in English or Russian (also in [docs/COMMANDS.md](docs/COMMANDS.md)).
+- **Commands.** `/remember`, `/forget`, `/memory`, `/test`, `/commit`, `/review`, and `/guide`: the full list of commands and keys, in English, Russian or Kazakh (also in [docs/COMMANDS.md](docs/COMMANDS.md)).
 - **Live model status.** The footer shows whether the local model is loaded, loading or asleep.
 - **Offline by default.** No update checks, no sharing, no model catalogue downloads, no telemetry.
 
