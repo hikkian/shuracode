@@ -7,6 +7,7 @@
    "category": "Memory",
    "en": "Save something to Shura's permanent memory (or the most useful thing learned in this chat).",
    "ru": "Сохранить что-то в постоянную память Shura (или самое полезное, что выяснилось в этом чате).",
+   "kk": "Бірдеңені Shura-ның тұрақты жадына сақтау (немесе осы чатта анықталған ең пайдалы мәліметті).",
    "source": "shuracode",
    "example": "/remember I prefer small, focused commits"
   },
@@ -16,6 +17,7 @@
    "category": "Memory",
    "en": "Remove a memory.",
    "ru": "Удалить запись из памяти.",
+   "kk": "Жадтан жазбаны өшіру.",
    "source": "shuracode"
   },
   {
@@ -24,6 +26,7 @@
    "category": "Memory",
    "en": "Show what ShuraCode remembers about you and your projects.",
    "ru": "Показать, что ShuraCode помнит о тебе и твоих проектах.",
+   "kk": "ShuraCode сен және жобаларың туралы нені есте сақтағанын көрсету.",
    "source": "shuracode"
   },
   {
@@ -32,6 +35,7 @@
    "category": "Work",
    "en": "Run the project's tests and fix what fails.",
    "ru": "Запустить тесты проекта и починить то, что падает.",
+   "kk": "Жобаның тесттерін іске қосып, сәтсіз өткендерін түзету.",
    "source": "shuracode"
   },
   {
@@ -40,6 +44,7 @@
    "category": "Work",
    "en": "Write a commit in your repository's style. It never pushes.",
    "ru": "Написать коммит в стиле твоего репозитория. Никогда не пушит.",
+   "kk": "Репозиторийіңнің стиліне сай коммит жазу. Ешқашан push жасамайды.",
    "source": "shuracode"
   },
   {
@@ -48,6 +53,7 @@
    "category": "Model",
    "en": "Turn on the model's built-in 'short answers' prompt. Tiel-Coder only. The next reply reads the whole context again (slow once in a long session).",
    "ru": "Включить встроенный режим коротких ответов модели. Только у Tiel-Coder. Следующий ответ заново читает весь контекст (один раз медленно в длинной сессии).",
+   "kk": "Модельдің кірістірілген қысқа жауап режимін қосу. Тек Tiel-Coder үшін. Келесі жауап бүкіл контекстті қайта оқиды (ұзақ сессияда бір рет баяу).",
    "source": "shuracode",
    "models": [
     "tiel-coder"
@@ -59,6 +65,7 @@
    "category": "Model",
    "en": "Turn the short-answers prompt off (full-length answers). Tiel-Coder only. Re-reads the context once.",
    "ru": "Выключить режим коротких ответов (полные ответы). Только у Tiel-Coder. Один раз заново читает контекст.",
+   "kk": "Қысқа жауап режимін өшіру (толық жауаптар). Тек Tiel-Coder үшін. Контекстті бір рет қайта оқиды.",
    "source": "shuracode",
    "models": [
     "tiel-coder"
@@ -70,6 +77,7 @@
    "category": "Help",
    "en": "This reference: every command, what it does and where it works.",
    "ru": "Этот справочник: все команды, что они делают и где работают.",
+   "kk": "Осы анықтамалық: барлық командалар, олардың не істейтіні және қайда жұмыс істейтіні.",
    "source": "shuracode"
   },
   {
@@ -78,6 +86,7 @@
    "category": "Model",
    "en": "List the models and switch between them (Tiel-Coder and Occamy).",
    "ru": "Список моделей и переключение между ними (Tiel-Coder и Occamy).",
+   "kk": "Модельдер тізімі және олардың арасында ауысу (Tiel-Coder және Occamy).",
    "source": "engine",
    "key": "ctrl+x m"
   },
@@ -87,6 +96,7 @@
    "category": "Session",
    "en": "Start a new session.",
    "ru": "Начать новую сессию.",
+   "kk": "Жаңа сессия бастау.",
    "source": "engine",
    "key": "ctrl+x n"
   },
@@ -96,6 +106,7 @@
    "category": "Session",
    "en": "List and switch between sessions.",
    "ru": "Список сессий и переключение между ними.",
+   "kk": "Сессиялар тізімі және олардың арасында ауысу.",
    "source": "engine",
    "key": "ctrl+x l"
   },
@@ -105,6 +116,7 @@
    "category": "Session",
    "en": "Compact the current session (summarise the history to free context).",
    "ru": "Сжать текущую сессию (сделать краткую сводку истории, чтобы освободить контекст).",
+   "kk": "Ағымдағы сессияны қысу (контекстті босату үшін тарихтың қысқаша мазмұнын жасау).",
    "source": "engine",
    "key": "ctrl+x c"
   },
@@ -114,6 +126,7 @@
    "category": "Session",
    "en": "Undo the last message and its file changes.",
    "ru": "Отменить последнее сообщение и его изменения файлов.",
+   "kk": "Соңғы хабарламаны және оның файлдарға енгізген өзгерістерін болдырмау.",
    "source": "engine",
    "key": "ctrl+x u"
   },
@@ -123,6 +136,7 @@
    "category": "Session",
    "en": "Redo a message you undid.",
    "ru": "Вернуть отменённое сообщение.",
+   "kk": "Болдырмаған хабарламаны қайтару.",
    "source": "engine",
    "key": "ctrl+x r"
   },
@@ -132,6 +146,7 @@
    "category": "Work",
    "en": "Review your uncommitted changes.",
    "ru": "Проверить твои незакоммиченные изменения (ревью).",
+   "kk": "Коммит жасалмаған өзгерістеріңді тексеру (review).",
    "source": "engine"
   },
   {
@@ -140,6 +155,7 @@
    "category": "Work",
    "en": "Guided setup of the project's AGENTS.md.",
    "ru": "Пошаговое создание файла AGENTS.md проекта.",
+   "kk": "Жобаның AGENTS.md файлын қадам-қадаммен жасау.",
    "source": "engine"
   },
   {
@@ -148,6 +164,7 @@
    "category": "View",
    "en": "Toggle the details of tool calls.",
    "ru": "Показать или скрыть подробности вызовов инструментов.",
+   "kk": "Құрал шақыруларының егжей-тегжейін көрсету немесе жасыру.",
    "source": "engine"
   },
   {
@@ -156,6 +173,7 @@
    "category": "View",
    "en": "Toggle the visibility of the model's thinking blocks.",
    "ru": "Показать или скрыть блоки рассуждений модели.",
+   "kk": "Модельдің ойлану блоктарын көрсету немесе жасыру.",
    "source": "engine"
   },
   {
@@ -164,6 +182,7 @@
    "category": "View",
    "en": "List themes and switch.",
    "ru": "Список тем оформления и переключение.",
+   "kk": "Темалар тізімі және ауысу.",
    "source": "engine",
    "key": "ctrl+x t"
   },
@@ -173,6 +192,7 @@
    "category": "Input",
    "en": "Open your external editor to compose a message.",
    "ru": "Открыть внешний редактор, чтобы написать сообщение.",
+   "kk": "Хабарлама жазу үшін сыртқы редакторды ашу.",
    "source": "engine",
    "key": "ctrl+x e"
   },
@@ -182,6 +202,7 @@
    "category": "Session",
    "en": "Export the conversation to Markdown.",
    "ru": "Выгрузить разговор в Markdown.",
+   "kk": "Әңгімені Markdown форматына экспорттау.",
    "source": "engine",
    "key": "ctrl+x x"
   },
@@ -191,6 +212,7 @@
    "category": "Session",
    "en": "Share the current session (needs an online share service; off in ShuraCode by default).",
    "ru": "Поделиться сессией (нужен онлайн-сервис; в ShuraCode по умолчанию выключено).",
+   "kk": "Сессиямен бөлісу (онлайн-сервис керек; ShuraCode-та әдепкіде өшірулі).",
    "source": "engine"
   },
   {
@@ -199,6 +221,7 @@
    "category": "Session",
    "en": "Stop sharing the current session.",
    "ru": "Перестать делиться сессией.",
+   "kk": "Сессиямен бөлісуді тоқтату.",
    "source": "engine"
   },
   {
@@ -207,6 +230,7 @@
    "category": "Model",
    "en": "Add a provider with API keys (not needed for the local models).",
    "ru": "Добавить провайдера с ключом API (для локальных моделей не нужно).",
+   "kk": "API кілті бар провайдер қосу (жергілікті модельдерге қажет емес).",
    "source": "engine"
   },
   {
@@ -215,6 +239,7 @@
    "category": "Help",
    "en": "The engine's own help dialog (key bindings).",
    "ru": "Встроенная справка движка (сочетания клавиш).",
+   "kk": "Қозғалтқыштың өзінің анықтама терезесі (перне тіркесімдері).",
    "source": "engine"
   },
   {
@@ -223,6 +248,7 @@
    "category": "Session",
    "en": "Quit ShuraCode.",
    "ru": "Выйти из ShuraCode.",
+   "kk": "ShuraCode-тан шығу.",
    "source": "engine",
    "key": "ctrl+x q"
   },
@@ -232,6 +258,7 @@
    "category": "Input",
    "en": "Run a shell command from the prompt, for example !git status.",
    "ru": "Выполнить команду оболочки прямо из строки ввода, например !git status.",
+   "kk": "Енгізу жолынан тікелей shell командасын орындау, мысалы !git status.",
    "source": "engine",
    "kind": "syntax"
   },
@@ -241,6 +268,7 @@
    "category": "Input",
    "en": "Add a file to your message (fuzzy search as you type).",
    "ru": "Добавить файл в сообщение (нечёткий поиск по мере набора).",
+   "kk": "Хабарламаға файл қосу (тергенде fuzzy іздеу жұмыс істейді).",
    "source": "engine",
    "kind": "syntax"
   },
@@ -250,6 +278,7 @@
    "category": "Input",
    "en": "Open the command palette: every command with its key.",
    "ru": "Открыть палитру команд: все команды с их клавишами.",
+   "kk": "Командалар палитрасын ашу: барлық командалар өз пернелерімен.",
    "source": "engine",
    "kind": "key"
   },
@@ -259,6 +288,7 @@
    "category": "Input",
    "en": "The leader key: press it, then a letter (the keys listed next to the commands).",
    "ru": "Ведущая клавиша: нажми её, потом букву (клавиши указаны рядом с командами).",
+   "kk": "Leader пернесі: оны басып, содан кейін әріпті бас (пернелер командалардың қасында көрсетілген).",
    "source": "engine",
    "kind": "key"
   },
@@ -268,6 +298,7 @@
    "category": "Work",
    "en": "Switch Build and Plan; Plan only reads and proposes.",
    "ru": "Переключить Build и Plan; Plan только читает и предлагает.",
+   "kk": "Build және Plan режимдерін ауыстыру; Plan тек оқиды және ұсыныс жасайды.",
    "source": "engine",
    "kind": "key"
   },
@@ -277,6 +308,7 @@
    "category": "Shura (terminal)",
    "en": "Start ShuraCode (starts the gateway and warms the model).",
    "ru": "Запустить ShuraCode (поднимает шлюз и прогревает модель).",
+   "kk": "ShuraCode іске қосу (gateway-ді көтереді және модельді алдын ала жүктейді).",
    "source": "shura",
    "kind": "cli"
   },
@@ -286,6 +318,7 @@
    "category": "Shura (terminal)",
    "en": "Model state, memory, VRAM.",
    "ru": "Состояние модели, памяти и видеопамяти.",
+   "kk": "Модельдің, жадтың және VRAM-ның күйі.",
    "source": "shura",
    "kind": "cli"
   },
@@ -295,6 +328,7 @@
    "category": "Shura (terminal)",
    "en": "Load the model now.",
    "ru": "Загрузить модель сейчас.",
+   "kk": "Модельді қазір жүктеу.",
    "source": "shura",
    "kind": "cli"
   },
@@ -304,6 +338,7 @@
    "category": "Shura (terminal)",
    "en": "Free RAM and VRAM right away.",
    "ru": "Сразу освободить RAM и видеопамять.",
+   "kk": "RAM мен VRAM-ды дереу босату.",
    "source": "shura",
    "kind": "cli"
   },
@@ -313,6 +348,7 @@
    "category": "Shura (terminal)",
    "en": "Switch the AI off (it will not load until `shura on`).",
    "ru": "Выключить ИИ (не загрузится до `shura on`).",
+   "kk": "Жасанды интеллектті өшіру (`shura on` орындалғанға дейін жүктелмейді).",
    "source": "shura",
    "kind": "cli"
   },
@@ -322,6 +358,7 @@
    "category": "Shura (terminal)",
    "en": "Switch the AI back on.",
    "ru": "Снова включить ИИ.",
+   "kk": "Жасанды интеллектті қайта қосу.",
    "source": "shura",
    "kind": "cli"
   },
@@ -331,6 +368,7 @@
    "category": "Shura (terminal)",
    "en": "Game mode by hand: park the model, or bring it back (only when game mode is enabled).",
    "ru": "Режим игры вручную: поставить модель на паузу или вернуть (только если режим игры включён).",
+   "kk": "Ойын режимін қолмен басқару: модельді тоқтата тұру немесе қайтару (тек ойын режимі қосулы болғанда).",
    "source": "shura",
    "kind": "cli"
   },
@@ -340,6 +378,7 @@
    "category": "Shura (terminal)",
    "en": "Follow the gateway log.",
    "ru": "Смотреть журнал шлюза.",
+   "kk": "gateway журналын нақты уақытта қадағалау.",
    "source": "shura",
    "kind": "cli"
   },
@@ -349,6 +388,7 @@
    "category": "Shura (terminal)",
    "en": "Restart the gateway.",
    "ru": "Перезапустить шлюз.",
+   "kk": "gateway-ді қайта іске қосу.",
    "source": "shura",
    "kind": "cli"
   },
@@ -358,6 +398,7 @@
    "category": "Shura (terminal)",
    "en": "Check what fits your hardware, and make a report to share.",
    "ru": "Проверить, что подходит твоему железу, и собрать отчёт, чтобы им поделиться.",
+   "kk": "Жабдығыңа не сәйкес келетінін тексеру және бөлісуге арналған есеп жинау.",
    "source": "shura",
    "kind": "cli"
   },
@@ -367,6 +408,7 @@
    "category": "Shura (terminal)",
    "en": "Install or remove the engine and model, start or stop it (the universal installer).",
    "ru": "Установить или удалить движок и модель, запустить или остановить (универсальный установщик).",
+   "kk": "Қозғалтқыш пен модельді орнату немесе жою, іске қосу немесе тоқтату (әмбебап инсталлятор).",
    "source": "shura",
    "kind": "cli"
   }

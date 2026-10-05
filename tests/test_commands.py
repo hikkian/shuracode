@@ -15,12 +15,13 @@ class CommandReference(unittest.TestCase):
         r = subprocess.run([sys.executable, str(ROOT / "scripts" / "build_commands.py"), "--check"], capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout + "\nrun: python3 scripts/build_commands.py")
 
-    def test_every_prompt_command_file_is_listed_with_a_russian_text(self):
+    def test_every_prompt_command_file_is_listed_with_russian_and_kazakh_text(self):
         data = build_commands.build()
         ids = {i["id"]: i for i in data["items"]}
         for md in (ROOT / "commands").glob("*.md"):
             self.assertIn(md.stem, ids, f"commands/{md.name} is not in the reference")
             self.assertTrue(ids[md.stem]["ru"].strip())
+            self.assertTrue(ids[md.stem]["kk"].strip())
             self.assertEqual(ids[md.stem]["name"], "/" + md.stem)
 
     def test_every_slash_command_the_plugin_registers_is_listed(self):
@@ -33,9 +34,26 @@ class CommandReference(unittest.TestCase):
 
     def test_entries_are_complete(self):
         for i in build_commands.build()["items"]:
-            self.assertTrue(i["en"].strip() and i["ru"].strip(), i["id"])
+            self.assertTrue(i["en"].strip() and i["ru"].strip() and i["kk"].strip(), i["id"])
             self.assertIn(i["category"], build_commands.CATEGORY_ORDER, i["id"])
             self.assertIn(i["source"], build_commands.SOURCE_NOTE, i["id"])
+
+    def test_missing_kazakh_text_fails_with_a_clear_message(self):
+        import json
+        import tempfile
+        src = json.loads(build_commands.SRC.read_text())
+        del src["items"][0]["kk"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "commands.src.json"
+            path.write_text(json.dumps(src, ensure_ascii=False))
+            original, build_commands.SRC = build_commands.SRC, path
+            try:
+                with self.assertRaises(SystemExit) as ctx:
+                    build_commands.build()
+            finally:
+                build_commands.SRC = original
+        self.assertIn('"kk"', str(ctx.exception))
+        self.assertIn(src["items"][0]["id"], str(ctx.exception))
 
     def test_terse_commands_are_marked_as_tiel_only(self):
         items = {i["id"]: i for i in build_commands.build()["items"]}

@@ -31,7 +31,7 @@ CHECKS = {
     "plugin logo": re.compile(r"your local coding council"),
     "footer brand": re.compile(r"ShuraCode|Shura\s*Code"),
 }
-GUIDE = re.compile(r"This reference: every command|Этот справочник: все команды")
+GUIDE = re.compile(r"This reference: every command|Этот справочник: все команды|Осы анықтамалық: барлық командалар")
 TITLE = re.compile(rb"\x1b\][02];ShuraCode")
 ANSI = re.compile(r"\x1b\[[0-9;?<>=]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[PX^_][^\x1b]*\x1b\\")
 
