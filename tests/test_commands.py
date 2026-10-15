@@ -34,7 +34,12 @@ class CommandReference(unittest.TestCase):
 
     def test_entries_are_complete(self):
         for i in build_commands.build()["items"]:
-            self.assertTrue(i["en"].strip() and i["ru"].strip() and i["kk"].strip(), i["id"])
+            self.assertTrue(i["en"].strip() and i["ru"].strip(), i["id"])
+            if i.get("kk_hidden"):
+                # held back until a native reader has checked the Kazakh: no Kazakh text at all
+                self.assertNotIn("kk", i, i["id"])
+            else:
+                self.assertTrue(i["kk"].strip(), i["id"])
             self.assertIn(i["category"], build_commands.CATEGORY_ORDER, i["id"])
             self.assertIn(i["source"], build_commands.SOURCE_NOTE, i["id"])
 

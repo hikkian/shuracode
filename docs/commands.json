@@ -239,29 +239,26 @@
    "category": "View",
    "en": "Show the live model numbers (speed, context, VRAM, RAM, zram, temperatures) in a dialog. Numbers the gateway does not report show n/a.",
    "ru": "Показать живые показатели модели (скорость, контекст, VRAM, RAM, zram, температуры) в диалоге. Чего шлюз не сообщает, помечено n/a.",
-   "kk": "Модельдің тірі көрсеткіштерін (жылдамдық, контекст, VRAM, RAM, zram, температуралар) диалогта көрсету. Шлюз хабарламаған мәндер n/a деп белгіленеді.",
    "source": "shuracode",
-   "kk_draft": true
+   "kk_hidden": true
   },
   {
    "id": "stats-full",
    "name": "/stats-full",
    "category": "View",
-   "en": "Open the full monitor page in the browser (runs `shura monitor --full`).",
-   "ru": "Открыть полную страницу монитора в браузере (запускает `shura monitor --full`).",
-   "kk": "Толық монитор бетін браузерде ашу (`shura monitor --full` іске қосады).",
+   "en": "Open the full monitor page in the browser (the gateway's /monitor). If the browser cannot start, a dialog shows the address.",
+   "ru": "Открыть полную страницу монитора в браузере (/monitor у шлюза). Если браузер не запустился, диалог покажет адрес.",
    "source": "shuracode",
-   "kk_draft": true
+   "kk_hidden": true
   },
   {
    "id": "stats-window",
    "name": "/stats-window",
    "category": "View",
-   "en": "Open the compact monitor window (runs `shura monitor`). If the shura command is missing, a dialog says so.",
-   "ru": "Открыть компактное окно монитора (запускает `shura monitor`). Если команды shura нет, диалог об этом скажет.",
-   "kk": "Ықшам монитор терезесін ашу (`shura monitor` іске қосады). shura командасы жоқ болса, диалог бұл туралы хабарлайды.",
+   "en": "Open the compact monitor page in the browser (the gateway's /monitor?view=compact). If the browser cannot start, a dialog shows the address.",
+   "ru": "Открыть компактную страницу монитора в браузере (/monitor?view=compact у шлюза). Если браузер не запустился, диалог покажет адрес.",
    "source": "shuracode",
-   "kk_draft": true
+   "kk_hidden": true
   },
   {
    "id": "themes",

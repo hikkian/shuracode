@@ -30,6 +30,30 @@ export function monitorUrl(gateway: string): string {
   }
 }
 
+// The monitor page the gateway serves in a browser. `?view=compact` is the small layout (the page's own switch).
+export function monitorPageUrl(gateway: string, compact: boolean): string {
+  try {
+    return new URL(gateway).origin + "/monitor" + (compact ? "?view=compact" : "")
+  } catch {
+    return ""
+  }
+}
+
+type Child = { on(event: "error", fn: () => void): unknown; unref(): unknown }
+type SpawnLike = (cmd: string, args: string[], opts: { detached: boolean; stdio: "ignore" }) => Child
+
+// Opens a URL in the desktop's browser through xdg-open: detached, without waiting. `onFail` runs when the opener
+// cannot start (for example, it is not installed); xdg-open's own exit code is not read here.
+export function openInBrowser(url: string, spawnFn: SpawnLike, onFail: () => void): void {
+  try {
+    const child = spawnFn("xdg-open", [url], { detached: true, stdio: "ignore" })
+    child.on("error", onFail)
+    child.unref()
+  } catch {
+    onFail()
+  }
+}
+
 export function toneOf(level: unknown): Tone {
   return level === "ok" ? "green" : level === "warn" ? "amber" : level === "crit" ? "red" : "grey"
 }

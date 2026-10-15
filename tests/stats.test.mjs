@@ -81,6 +81,44 @@ test("monitorUrl takes the origin of the gateway option, so the page path is not
   assert.equal(stats.monitorUrl("not a url"), "")
 })
 
+test("monitorPageUrl opens the gateway's /monitor page, compact only on request", () => {
+  assert.equal(stats.monitorPageUrl("http://127.0.0.1:8080/guardian/status", false), "http://127.0.0.1:8080/monitor")
+  assert.equal(stats.monitorPageUrl("http://127.0.0.1:8080/guardian/status", true), "http://127.0.0.1:8080/monitor?view=compact")
+  assert.equal(stats.monitorPageUrl("http://10.0.0.5:9000/x/y?z=1", false), "http://10.0.0.5:9000/monitor")
+  assert.equal(stats.monitorPageUrl("not a url", true), "")
+})
+
+test("openInBrowser runs xdg-open detached without waiting, and reports an opener that cannot start", () => {
+  const calls = []
+  let unrefs = 0
+  const okSpawn = (cmd, args, opts) => {
+    calls.push({ cmd, args, opts })
+    return { on() { return this }, unref() { unrefs += 1 } }
+  }
+  let failed = 0
+  stats.openInBrowser("http://127.0.0.1:8080/monitor", okSpawn, () => { failed += 1 })
+  assert.deepEqual(calls, [{ cmd: "xdg-open", args: ["http://127.0.0.1:8080/monitor"], opts: { detached: true, stdio: "ignore" } }])
+  assert.equal(unrefs, 1)
+  assert.equal(failed, 0)
+
+  // the opener is missing: the child reports ENOENT on its "error" event
+  let handler = null
+  const missingSpawn = () => ({ on(ev, fn) { if (ev === "error") handler = fn; return this }, unref() {} })
+  stats.openInBrowser("http://127.0.0.1:8080/monitor", missingSpawn, () => { failed += 1 })
+  handler(new Error("spawn xdg-open ENOENT"))
+  assert.equal(failed, 1)
+
+  // spawn itself throws synchronously
+  stats.openInBrowser("http://127.0.0.1:8080/monitor", () => { throw new Error("EACCES") }, () => { failed += 1 })
+  assert.equal(failed, 2)
+})
+
+test("the stats commands no longer call the missing `shura monitor` subcommand", () => {
+  const src = readFileSync(new URL("../plugin/shuracode.tsx", import.meta.url), "utf8")
+  assert.doesNotMatch(src, /spawn\("shura"/)
+  assert.match(src, /openInBrowser\(url, spawn,/)
+})
+
 test("num shows n/a for anything that is not a finite number, never 0", () => {
   assert.equal(stats.num(51.44, 1, " tok/s"), "51.4 tok/s")
   for (const missing of [null, undefined, NaN, Infinity, "12", {}]) {

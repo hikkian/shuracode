@@ -9,7 +9,7 @@ import { spawn } from "node:child_process"
 import { readdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { createPoller, monitorUrl, viewOf, type Poller, type Reading, type Tone, type View } from "./stats"
+import { createPoller, monitorPageUrl, monitorUrl, openInBrowser, viewOf, type Poller, type Reading, type Tone, type View } from "./stats"
 
 const VERSION = "0.1.0"
 
@@ -380,27 +380,27 @@ const tui: TuiPlugin = async (api, options) => {
       />
     ))
   }
-  // /stats: the live numbers in a dialog. /stats-window and /stats-full run the Shura CLI's own monitor.
+  // /stats: the live numbers in a dialog. /stats-window and /stats-full open the gateway's monitor page in the browser.
   const openStats = () => {
     api.ui.dialog.replace(() => <StatsDialog api={api} view={view} poller={stats} onClose={() => api.ui.dialog.clear()} />)
   }
-  const shuraMissing = () => {
+  // If the browser cannot be started, the dialog shows the address so it can be opened by hand.
+  const browserFailed = (url: string) => {
     api.ui.dialog.replace(() => (
       <api.ui.DialogAlert
-        title="Shura stats"
-        message="The `shura` command was not found on PATH, so the monitor did not open. Install Shura's CLI or run it from a terminal."
+        title="Shura monitor"
+        message={`The browser did not open. Open this address yourself:\n${url}`}
         onConfirm={() => api.ui.dialog.clear()}
       />
     ))
   }
-  const runShura = (args: string[]) => {
-    try {
-      const child = spawn("shura", args, { detached: true, stdio: "ignore" })
-      child.on("error", shuraMissing)
-      child.unref()
-    } catch {
-      shuraMissing()
+  const openMonitor = (compact: boolean) => {
+    const url = monitorPageUrl(gateway, compact)
+    if (!url) {
+      api.ui.toast({ variant: "error", message: "No gateway address is set, so the monitor page has no address." })
+      return
     }
+    openInBrowser(url, spawn, () => browserFailed(url))
   }
   api.command?.register(() => [
     {
@@ -442,18 +442,18 @@ const tui: TuiPlugin = async (api, options) => {
     {
       title: "Stats window",
       value: "shuracode.stats.window",
-      description: "open the compact monitor window (shura monitor)",
+      description: "open the compact monitor page in the browser",
       category: "ShuraCode",
       slash: { name: "stats-window" },
-      onSelect: () => runShura(["monitor"]),
+      onSelect: () => openMonitor(true),
     },
     {
       title: "Stats page",
       value: "shuracode.stats.full",
-      description: "open the full monitor page in the browser (shura monitor --full)",
+      description: "open the full monitor page in the browser",
       category: "ShuraCode",
       slash: { name: "stats-full" },
-      onSelect: () => runShura(["monitor", "--full"]),
+      onSelect: () => openMonitor(false),
     },
   ])
 
