@@ -4,10 +4,12 @@
 // so engine updates do not overwrite it.
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { RGBA, TextAttributes } from "@opentui/core"
-import { createMemo, createRoot, createSignal, createEffect, For, Show } from "solid-js"
+import { createMemo, createRoot, createSignal, createEffect, For, Index, onCleanup, onMount, Show } from "solid-js"
+import { spawn } from "node:child_process"
 import { readdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { createPoller, monitorUrl, viewOf, type Poller, type Reading, type Tone, type View } from "./stats"
 
 const VERSION = "0.1.0"
 
@@ -142,6 +144,78 @@ function ModelBadge(props: { api: TuiPluginApi; model: () => Model; compact?: bo
   )
 }
 
+// ------------------------------------------------------------------------------------------------ stats
+// The numbers come from stats.tsx through one shared poller. A component asks for them only while it is mounted,
+// so nothing is requested while no stats are on screen.
+function toneFg(api: TuiPluginApi, tone: Tone) {
+  const t = api.theme.current
+  return tone === "green" ? t.success : tone === "amber" ? t.warning : tone === "red" ? t.error : t.textMuted
+}
+
+function StatsRows(props: { api: TuiPluginApi; view: () => View }) {
+  const theme = () => props.api.theme.current
+  return (
+    <Show when={props.view().rows.length > 0} fallback={<text fg={theme().textMuted}>{props.view().line}</text>}>
+      <Index each={props.view().rows}>
+        {(row) => (
+          <box>
+            <text fg={theme().textMuted}>
+              {row().label} <span style={{ fg: theme().text }}>{row().text}</span>
+            </text>
+            <Show when={row().bar}>{(b) => <text fg={theme().accent}>{b()}</text>}</Show>
+          </box>
+        )}
+      </Index>
+    </Show>
+  )
+}
+
+function StatsLine(props: { api: TuiPluginApi; view: () => View; poller: Poller }) {
+  onMount(() => props.poller.retain())
+  onCleanup(() => props.poller.release())
+  const theme = () => props.api.theme.current
+  return (
+    <box flexDirection="column" flexShrink={0}>
+      <Show when={props.view().banner}>{(text) => <text fg={theme().error}>⚠ {text()}</text>}</Show>
+      <text fg={theme().textMuted}>
+        <span style={{ fg: toneFg(props.api, props.view().tone) }}>●</span> {props.view().line}
+      </text>
+    </box>
+  )
+}
+
+function StatsPanel(props: { api: TuiPluginApi; view: () => View; poller: Poller }) {
+  onMount(() => props.poller.retain())
+  onCleanup(() => props.poller.release())
+  const theme = () => props.api.theme.current
+  return (
+    <box gap={0}>
+      <text fg={theme().textMuted}>
+        <span style={{ fg: theme().accent }}>◆</span> Stats
+      </text>
+      <StatsRows api={props.api} view={props.view} />
+    </box>
+  )
+}
+
+function StatsDialog(props: { api: TuiPluginApi; view: () => View; poller: Poller; onClose: () => void }) {
+  onMount(() => props.poller.retain())
+  onCleanup(() => props.poller.release())
+  const theme = () => props.api.theme.current
+  const Dialog = props.api.ui.Dialog
+  return (
+    <Dialog size="medium" onClose={props.onClose}>
+      <box flexDirection="column" paddingLeft={2} paddingRight={2} paddingBottom={1}>
+        <text fg={theme().text}>
+          <b>Shura stats</b>
+        </text>
+        <Show when={props.view().banner}>{(text) => <text fg={theme().error}>⚠ {text()}</text>}</Show>
+        <StatsRows api={props.api} view={props.view} />
+      </box>
+    </Dialog>
+  )
+}
+
 function shortPath(dir: string) {
   const home = homedir()
   return dir === home ? "~" : dir.startsWith(home + "/") ? "~" + dir.slice(home.length) : dir
@@ -210,6 +284,11 @@ const tui: TuiPlugin = async (api, options) => {
   const gateway = opts.gateway ?? "http://127.0.0.1:8080/guardian/status"
   const memoryDir = opts.memory_dir ?? join(homedir(), ".local/share/shura/memory")
   const model = watchModel(gateway)
+  // Stats from the gateway's monitor: one shared poller, retained only while a status line, panel or dialog shows them.
+  const [reading, setReading] = createSignal<Reading | null>(null)
+  const stats = createPoller({ url: monitorUrl(gateway), onChange: setReading })
+  const view = createMemo(() => viewOf(reading()))
+  api.lifecycle?.onDispose(() => stats.stop())
   const memories = watchMemory(memoryDir)
   const tip = TIPS[Math.floor(Math.random() * TIPS.length)]
   const theme = () => api.theme.current
@@ -301,6 +380,28 @@ const tui: TuiPlugin = async (api, options) => {
       />
     ))
   }
+  // /stats: the live numbers in a dialog. /stats-window and /stats-full run the Shura CLI's own monitor.
+  const openStats = () => {
+    api.ui.dialog.replace(() => <StatsDialog api={api} view={view} poller={stats} onClose={() => api.ui.dialog.clear()} />)
+  }
+  const shuraMissing = () => {
+    api.ui.dialog.replace(() => (
+      <api.ui.DialogAlert
+        title="Shura stats"
+        message="The `shura` command was not found on PATH, so the monitor did not open. Install Shura's CLI or run it from a terminal."
+        onConfirm={() => api.ui.dialog.clear()}
+      />
+    ))
+  }
+  const runShura = (args: string[]) => {
+    try {
+      const child = spawn("shura", args, { detached: true, stdio: "ignore" })
+      child.on("error", shuraMissing)
+      child.unref()
+    } catch {
+      shuraMissing()
+    }
+  }
   api.command?.register(() => [
     {
       title: "Command reference",
@@ -329,6 +430,30 @@ const tui: TuiPlugin = async (api, options) => {
       hidden: model().terseSupported === false,
       slash: { name: "terse-off" },
       onSelect: () => void setTerse(false),
+    },
+    {
+      title: "Stats",
+      value: "shuracode.stats",
+      description: "live model numbers: speed, context, VRAM, RAM, zram, temperatures",
+      category: "ShuraCode",
+      slash: { name: "stats" },
+      onSelect: () => openStats(),
+    },
+    {
+      title: "Stats window",
+      value: "shuracode.stats.window",
+      description: "open the compact monitor window (shura monitor)",
+      category: "ShuraCode",
+      slash: { name: "stats-window" },
+      onSelect: () => runShura(["monitor"]),
+    },
+    {
+      title: "Stats page",
+      value: "shuracode.stats.full",
+      description: "open the full monitor page in the browser (shura monitor --full)",
+      category: "ShuraCode",
+      slash: { name: "stats-full" },
+      onSelect: () => runShura(["monitor", "--full"]),
     },
   ])
 
@@ -408,6 +533,12 @@ const tui: TuiPlugin = async (api, options) => {
             </box>
           </box>
         )
+      },
+      app_bottom() {
+        return <StatsLine api={api} view={view} poller={stats} />
+      },
+      sidebar_content() {
+        return <StatsPanel api={api} view={view} poller={stats} />
       },
     },
   })
