@@ -64,3 +64,20 @@ export function renderSkills(entries: SkillEntry[]): string {
 export function replaceSkillsBlock(system: string, rendered: string): string {
   return SKILLS_BLOCK.test(system) ? system.replace(SKILLS_BLOCK, () => rendered) : system
 }
+
+// The date leaves the system text: the same wording every day, so the start of the prompt does not change at midnight.
+// The real date is written into the user's message once per day (see dateNote), where it stays after that.
+export function stableDateLine(system: string): string {
+  return system.replace(DATE_LINE, () => "Today's date: given in the user's messages")
+}
+
+// The engine names the model in one line of its prompt ("You are powered by the model named …"). The name is kept in a
+// user message instead (see the chat.message hook), so this line stays the same across model switches.
+const MODEL_LINE = /You are powered by the model named [^\n]*\n/
+export function stableModelLine(system: string): string {
+  return system.replace(MODEL_LINE, () => "You are powered by the model named in the [Model: …] note of the conversation.\n")
+}
+
+export function dateNote(now: Date): string {
+  return `Today's date: ${now.toDateString()}`
+}
