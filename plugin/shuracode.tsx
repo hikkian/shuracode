@@ -337,6 +337,21 @@ const tui: TuiPlugin = async (api, options) => {
       return ""
     }
   })()
+  // Session cache (SESS2): with the opt-in flag, ask the gateway to warm the model and this project's session at start. Off unless
+  // shuracode.session_warm is set in kv, so the default start is unchanged. The session id is a random uuid kept in kv (no paths).
+  if (api.kv.get("shuracode.session_warm", false) === true && guardianBase) {
+    let sessionId = String(api.kv.get("shuracode.session_id", "") ?? "")
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(sessionId)) {
+      sessionId = crypto.randomUUID()
+      api.kv.set("shuracode.session_id", sessionId)
+    }
+    fetch(guardianBase + "warm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Shura-Session": sessionId },
+      body: "{}",
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => {})
+  }
   const setTerse = async (on: boolean) => {
     if (model().terseSupported === false) {
       api.ui.toast({ variant: "warning", message: "Terse mode exists only for Tiel-Coder; the model in use does not have it." })
