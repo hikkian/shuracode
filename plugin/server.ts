@@ -6,6 +6,7 @@ import { readdir, readFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { collectSkills, dateNote, renderSkills, replaceSkillsBlock, stableDateLine, stableModelLine, type SkillFile } from "./prefix-stability.ts"
+import { sessionHeader } from "./session-header.ts"
 
 const REPLACEMENTS: [RegExp, string][] = [
   [/Get help with using opencode\b/g, "Get help with using ShuraCode"],
@@ -61,6 +62,11 @@ const plugin: PluginModule & { id: string } = {
         output.system.forEach((text, i) => {
           output.system[i] = replaceSkillsBlock(stableModelLine(stableDateLine(rebrand(text))), list)
         })
+      },
+      // Session cache: the gateway keys its snapshot by this header (SESS2b). Set per engine session, no personal data.
+      "chat.headers": async (input, output) => {
+        const id = sessionHeader(String(input.sessionID ?? ""))
+        if (id) output.headers["X-Shura-Session"] = id
       },
       "chat.message": async (input, output) => {
         const date = dateNote(new Date())
