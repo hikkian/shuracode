@@ -5,6 +5,7 @@
 import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { RGBA, TextAttributes } from "@opentui/core"
 import { createMemo, createRoot, createSignal, createEffect, For, Index, onCleanup, onMount, Show } from "solid-js"
+import { applyThinkingDefault, type KvLike } from "./thinking-default"
 import { spawn } from "node:child_process"
 import { readdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
@@ -306,6 +307,13 @@ const tui: TuiPlugin = async (api, options) => {
       }
     })
     .catch(() => {})
+
+  // Reasoning shown as it streams, once (plugin/thinking-default.ts). A choice made later with the toggle is kept.
+  try {
+    applyThinkingDefault(api.kv as unknown as KvLike)
+  } catch {
+    // cosmetic default: the engine keeps its own setting if this fails
+  }
 
   // Terminal title (the launcher sets OPENCODE_DISABLE_TERMINAL_TITLE so the engine leaves it alone).
   createRoot(() => {
