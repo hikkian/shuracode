@@ -77,15 +77,20 @@ function Logo(props: { api: TuiPluginApi }) {
 type Context = { mode: "auto" | "extended"; window?: number; short?: number; long?: number; available: boolean }
 type Switch = { to: "long" | "short"; eta: number; startedAt: number }
 type Think = { level: string; effective: string | null; available: string[]; isDefault: boolean }
+type Reading = { processed: number; total: number; cache: number; eta: number }
 type Model = {
   state: "ready" | "loading" | "sleeping" | "off" | "offline" | "none"; detail: string; terse?: boolean; terseSupported?: boolean
-  context?: Context; switching?: Switch; think?: Think
+  context?: Context; switching?: Switch; think?: Think; reading?: Reading
 }
 // detail: the model name when ready/loading, otherwise a hint
 
 // SWITCHUI1 / THINK2: the context mode, the layout switch in progress and the thinking level, from GET /guardian/status.
-function readExtras(s: Record<string, any>): Pick<Model, "context" | "switching" | "think"> {
-  const out: Pick<Model, "context" | "switching" | "think"> = {}
+function readExtras(s: Record<string, any>): Pick<Model, "context" | "switching" | "think" | "reading"> {
+  const out: Pick<Model, "context" | "switching" | "think" | "reading"> = {}
+  const pp = s.prompt_progress
+  if (pp && pp.state === "reading" && Number(pp.total) > 0) {
+    out.reading = { processed: Number(pp.processed) || 0, total: Number(pp.total), cache: Number(pp.cache) || 0, eta: Number(pp.eta_s) || 0 }
+  }
   const c = s.context_mode
   if (c && typeof c === "object") {
     out.context = { mode: c.mode === "extended" ? "extended" : "auto", window: c.window ?? undefined, short: c.short_ctx ?? undefined,
@@ -102,6 +107,9 @@ function readExtras(s: Record<string, any>): Pick<Model, "context" | "switching"
   }
   return out
 }
+
+// 45000 -> "45 000"
+const thousands = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ")
 
 // 49152 -> 48K, 200000 -> 200K
 export function contextSize(n?: number): string {
@@ -134,7 +142,7 @@ function watchModel(url: string) {
   const loop = async () => {
     await poll()
     const m = model()
-    setTimeout(loop, m.switching || m.state === "loading" ? 1000 : 2500)
+    setTimeout(loop, m.switching || m.reading || m.state === "loading" ? 1000 : 2500)
   }
   loop()
   return model
@@ -181,9 +189,9 @@ function ModelBadge(props: { api: TuiPluginApi; model: () => Model; compact?: bo
 }
 
 const CHIP: Record<"en" | "ru", Record<string, string>> = {
-  en: { auto: "auto", extended: "extended", toLong: "Expanding context to", toShort: "Back to the fast mode", think: "thinking",
+  en: { auto: "auto", extended: "extended", toLong: "Expanding context to", toShort: "Back to the fast mode", think: "thinking", reading: "Reading the context",
     off: "off", low: "brief", medium: "normal", high: "deep", s: "s" },
-  ru: { auto: "авто", extended: "расширенный", toLong: "Расширяю контекст до", toShort: "Возвращаюсь в быстрый режим", think: "мышление",
+  ru: { auto: "авто", extended: "расширенный", toLong: "Расширяю контекст до", toShort: "Возвращаюсь в быстрый режим", think: "мышление", reading: "Читаю контекст",
     off: "выкл", low: "кратко", medium: "обычно", high: "глубоко", s: "с" },
 }
 const chipLang = (): "en" | "ru" => (lang() === "ru" ? "ru" : "en")
@@ -201,6 +209,10 @@ function ContextChip(props: { api: TuiPluginApi; model: () => Model }) {
       const left = Math.max(1, Math.round(m.switching.eta - (now() - m.switching.startedAt)))
       const head = m.switching.to === "long" ? `${t.toLong} ${contextSize(m.context?.long)}` : t.toShort
       return { busy: true, label: `${head}… ~${left} ${t.s}` }
+    }
+    // PROG1: a long read (a big paste, a cold start) shows how far it got instead of silence; short reads stay quiet
+    if (m.reading && m.reading.total - m.reading.cache >= 3000 && m.reading.eta >= 3) {
+      return { busy: true, label: `${t.reading}: ${thousands(m.reading.processed)} / ${thousands(m.reading.total)} · ~${Math.round(m.reading.eta)} ${t.s}` }
     }
     if (!m.context?.available) return undefined
     const mode = m.context.mode === "extended" ? t.extended : t.auto
