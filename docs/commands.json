@@ -20,6 +20,15 @@
    "source": "engine"
   },
   {
+   "id": "auto",
+   "name": "/auto",
+   "category": "Model",
+   "en": "Context mode Auto (the default): the fast mode with MTP; when a conversation outgrows the short window, Shura expands the context to the large one by itself (a few seconds, the conversation is kept).",
+   "ru": "Режим контекста «Авто» (по умолчанию): быстрый режим с MTP; когда разговор перерастает короткое окно, Шура сама расширяет контекст до большого (несколько секунд, разговор сохраняется).",
+   "kk": "«Авто» контекст режимі (әдепкі): MTP бар жылдам режим; әңгіме қысқа терезеден асқанда, Shura контекстті өзі үлкен терезеге дейін кеңейтеді (бірнеше секунд, әңгіме сақталады).",
+   "source": "shuracode"
+  },
+  {
    "id": "connect",
    "name": "/connect",
    "category": "Model",
@@ -27,6 +36,15 @@
    "ru": "Добавить провайдера с ключом API (для локальных моделей не нужно).",
    "kk": "API кілті бар провайдер қосу (жергілікті модельдерге қажет емес).",
    "source": "engine"
+  },
+  {
+   "id": "extended",
+   "name": "/extended",
+   "category": "Model",
+   "en": "Context mode Extended context: the large window (200K) from the start, no switches during work; generation is slower (no MTP). For big projects and long logs.",
+   "ru": "Режим «Расширенный контекст»: сразу большое окно (200K), без переключений во время работы; генерация медленнее (без MTP). Для больших проектов и длинных логов.",
+   "kk": "«Кеңейтілген контекст» режимі: басынан үлкен терезе (200K), жұмыс кезінде ауысусыз; генерация баяуырақ (MTP жоқ). Үлкен жобалар мен ұзын логтар үшін.",
+   "source": "shuracode"
   },
   {
    "id": "models",
@@ -61,6 +79,15 @@
    "models": [
     "tiel-coder"
    ]
+  },
+  {
+   "id": "think",
+   "name": "/think",
+   "category": "Model",
+   "en": "Thinking level: off (answers right away), brief, normal (default), deep (thinks longer, for hard tasks). Switching to or from brief/deep makes the next reply read the conversation again once.",
+   "ru": "Уровень мышления: выкл (ответ сразу), кратко, обычно (по умолчанию), глубоко (дольше, для сложных задач). Переход на «кратко»/«глубоко» или с них: следующий ответ один раз заново прочитает разговор.",
+   "kk": "Ойлау деңгейі: өшірулі (жауап бірден), қысқа, қалыпты (әдепкі), терең (ұзағырақ, күрделі тапсырмалар үшін). «Қысқа»/«терең» деңгейіне не одан ауысқанда келесі жауап әңгімені бір рет қайта оқиды.",
+   "source": "shuracode"
   },
   {
    "id": "forget",

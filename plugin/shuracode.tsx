@@ -74,8 +74,40 @@ function Logo(props: { api: TuiPluginApi }) {
 }
 
 // ------------------------------------------------------------------------------------------ live status
-type Model = { state: "ready" | "loading" | "sleeping" | "off" | "offline" | "none"; detail: string; terse?: boolean; terseSupported?: boolean }
+type Context = { mode: "auto" | "extended"; window?: number; short?: number; long?: number; available: boolean }
+type Switch = { to: "long" | "short"; eta: number; startedAt: number }
+type Think = { level: string; effective: string | null; available: string[]; isDefault: boolean }
+type Model = {
+  state: "ready" | "loading" | "sleeping" | "off" | "offline" | "none"; detail: string; terse?: boolean; terseSupported?: boolean
+  context?: Context; switching?: Switch; think?: Think
+}
 // detail: the model name when ready/loading, otherwise a hint
+
+// SWITCHUI1 / THINK2: the context mode, the layout switch in progress and the thinking level, from GET /guardian/status.
+function readExtras(s: Record<string, any>): Pick<Model, "context" | "switching" | "think"> {
+  const out: Pick<Model, "context" | "switching" | "think"> = {}
+  const c = s.context_mode
+  if (c && typeof c === "object") {
+    out.context = { mode: c.mode === "extended" ? "extended" : "auto", window: c.window ?? undefined, short: c.short_ctx ?? undefined,
+      long: c.long_ctx ?? undefined, available: !!c.available }
+  }
+  const sw = s.layout_switch
+  if (sw && sw.state === "switching") {
+    out.switching = { to: sw.to === "long" ? "long" : "short", eta: Number(sw.eta_s) || 5, startedAt: Number(sw.started_at) || Date.now() / 1000 }
+  }
+  const t = s.think
+  if (t && typeof t === "object") {
+    out.think = { level: String(t.level || "medium"), effective: t.effective ?? null, available: Array.isArray(t.available) ? t.available : [],
+      isDefault: !!t.default }
+  }
+  return out
+}
+
+// 49152 -> 48K, 200000 -> 200K
+export function contextSize(n?: number): string {
+  if (!n) return ""
+  return n % 1024 === 0 ? `${n / 1024}K` : `${Math.round(n / 1000)}K`
+}
 
 function watchModel(url: string) {
   const [model, setModel] = createSignal<Model>({ state: url ? "offline" : "none", detail: "" })
@@ -89,16 +121,22 @@ function watchModel(url: string) {
       const terse = typeof s.terse === "boolean" ? s.terse : undefined
       // only some models (Tiel-Coder) have the terse prompt; an older gateway does not say, so assume yes there
       const terseSupported = typeof s.terse_supported === "boolean" ? s.terse_supported : true
-      if (s.override === "OFF") setModel({ state: "off", detail: "disabled (shura on)", terse, terseSupported })
-      else if (status === "READY") setModel({ state: "ready", detail: name, terse, terseSupported })
-      else if (status === "LOADING" || status === "STARTING") setModel({ state: "loading", detail: name, terse, terseSupported })
-      else setModel({ state: "sleeping", detail: "loads on first message", terse, terseSupported })
+      const extras = readExtras(s)
+      if (s.override === "OFF") setModel({ state: "off", detail: "disabled (shura on)", terse, terseSupported, ...extras })
+      else if (status === "READY") setModel({ state: "ready", detail: name, terse, terseSupported, ...extras })
+      else if (status === "LOADING" || status === "STARTING") setModel({ state: "loading", detail: name, terse, terseSupported, ...extras })
+      else setModel({ state: "sleeping", detail: "loads on first message", terse, terseSupported, ...extras })
     } catch {
       setModel({ state: "offline", detail: "gateway not running" })
     }
   }
-  poll()
-  setInterval(poll, 4000)
+  // Faster while a model loads or the layout switches, so the countdown in the chat stays live; a local GET either way.
+  const loop = async () => {
+    await poll()
+    const m = model()
+    setTimeout(loop, m.switching || m.state === "loading" ? 1000 : 2500)
+  }
+  loop()
   return model
 }
 
@@ -136,6 +174,45 @@ function ModelBadge(props: { api: TuiPluginApi; model: () => Model; compact?: bo
           <Show when={!props.compact && !["ready", "loading"].includes(props.model().state) && props.model().detail}>
             <span> · {props.model().detail}</span>
           </Show>
+        </text>
+      )}
+    </Show>
+  )
+}
+
+const CHIP: Record<"en" | "ru", Record<string, string>> = {
+  en: { auto: "auto", extended: "extended", toLong: "Expanding context to", toShort: "Back to the fast mode", think: "thinking",
+    off: "off", low: "brief", medium: "normal", high: "deep", s: "s" },
+  ru: { auto: "авто", extended: "расширенный", toLong: "Расширяю контекст до", toShort: "Возвращаюсь в быстрый режим", think: "мышление",
+    off: "выкл", low: "кратко", medium: "обычно", high: "глубоко", s: "с" },
+}
+const chipLang = (): "en" | "ru" => (lang() === "ru" ? "ru" : "en")
+
+// Next to the prompt in the chat: the context window and the thinking level; while the gateway switches the layout,
+// a short countdown instead of silence.
+function ContextChip(props: { api: TuiPluginApi; model: () => Model }) {
+  const theme = () => props.api.theme.current
+  const [now, setNow] = createSignal(Date.now() / 1000)
+  setInterval(() => setNow(Date.now() / 1000), 1000)
+  const text = createMemo(() => {
+    const m = props.model()
+    const t = CHIP[chipLang()]
+    if (m.switching) {
+      const left = Math.max(1, Math.round(m.switching.eta - (now() - m.switching.startedAt)))
+      const head = m.switching.to === "long" ? `${t.toLong} ${contextSize(m.context?.long)}` : t.toShort
+      return { busy: true, label: `${head}… ~${left} ${t.s}` }
+    }
+    if (!m.context?.available) return undefined
+    const mode = m.context.mode === "extended" ? t.extended : t.auto
+    const thinking = m.think && m.think.effective && m.think.effective !== "medium" ? ` · ${t.think}: ${t[m.think.effective] ?? m.think.effective}` : ""
+    return { busy: false, label: `${mode} · ${contextSize(m.context.window)}${thinking}` }
+  })
+  return (
+    <Show when={text()}>
+      {(c) => (
+        <text fg={theme().textMuted}>
+          <Show when={c().busy}><span style={{ fg: theme().warning }}>◐ </span></Show>
+          {c().label}
         </text>
       )}
     </Show>
@@ -267,6 +344,93 @@ const tui: TuiPlugin = async (api, options) => {
       api.ui.toast({ variant: "error", message: "Could not reach the gateway; terse mode unchanged." })
     }
   }
+  // /auto, /extended: the context mode (SWITCHUI1). The logic is in the gateway; this only switches it.
+  const MODE_TEXT = {
+    en: {
+      auto: (s: string, l: string) => `Auto (up to ${l}): the fast mode; when a conversation outgrows ${s}, Shura expands the context to ${l} by itself (a few seconds).`,
+      extended: (l: string) => `Extended context (${l}): the large window from the start, no switches; generation is slower (no MTP).`,
+      failed: "Could not reach the gateway; the context mode is unchanged.",
+      single: (s: string) => `This model has one context window (${s}); there is nothing to switch.`,
+    },
+    ru: {
+      auto: (s: string, l: string) => `Авто (до ${l}): быстрый режим; когда разговор перерастает ${s}, Шура сама расширяет контекст до ${l} (несколько секунд).`,
+      extended: (l: string) => `Расширенный контекст (${l}): сразу большое окно, без переключений; генерация медленнее (без MTP).`,
+      failed: "Не удалось связаться со шлюзом; режим контекста не изменён.",
+      single: (s: string) => `У этой модели одно окно контекста (${s}); переключать нечего.`,
+    },
+  }
+  const setContextMode = async (mode: "auto" | "extended") => {
+    const t = MODE_TEXT[chipLang()]
+    try {
+      const res = await fetch(guardianBase + "context-mode-" + mode, { method: "POST", signal: AbortSignal.timeout(3000) })
+      if (!res.ok) throw new Error(String(res.status))
+      const c = (await res.json()) as Record<string, any>
+      const s = contextSize(c.short_ctx), l = contextSize(c.long_ctx)
+      if (!c.available) {
+        api.ui.toast({ variant: "warning", message: t.single(s) })
+        return
+      }
+      api.ui.toast({ variant: "info", message: mode === "auto" ? t.auto(s, l) : t.extended(l) })
+    } catch {
+      api.ui.toast({ variant: "error", message: t.failed })
+    }
+  }
+  // /think: the thinking level (THINK2). Brief and deep put a line at the start of the prompt, so changing to or from them
+  // makes the next reply read the conversation again once; off and normal do not.
+  const THINK_TEXT = {
+    en: {
+      title: "Thinking (Esc to close)", off: "Off", low: "Brief", medium: "Normal", high: "Deep",
+      offD: "answers right away; for simple questions", lowD: "a short think", mediumD: "the default", highD: "thinks longer; for hard tasks",
+      reread: "The next reply reads the conversation again once.", none: "This model has no thinking levels.",
+      asLow: "this model cannot switch thinking off; it thinks briefly", failed: "Could not reach the gateway; the thinking level is unchanged.",
+      set: "Thinking", current: " (current)",
+    },
+    ru: {
+      title: "Мышление (Esc: закрыть)", off: "Выкл", low: "Кратко", medium: "Обычно", high: "Глубоко",
+      offD: "ответ сразу; для простых вопросов", lowD: "немного подумать", mediumD: "по умолчанию", highD: "дольше; для сложных задач",
+      reread: "Следующий ответ один раз заново прочитает разговор.", none: "У этой модели нет уровней мышления.",
+      asLow: "эта модель не умеет выключать рассуждение; будет рассуждать кратко", failed: "Не удалось связаться со шлюзом; уровень мышления не изменён.",
+      set: "Мышление", current: " (сейчас)",
+    },
+  }
+  const setThink = async (level: string) => {
+    const t = THINK_TEXT[chipLang()]
+    const before = model().think?.effective ?? "medium"
+    try {
+      const res = await fetch(guardianBase + "think-" + level, { method: "POST", signal: AbortSignal.timeout(3000) })
+      if (!res.ok) throw new Error(String(res.status))
+      const th = (await res.json()) as Record<string, any>
+      const after = String(th.effective ?? "medium")
+      const prefixChanged = (before === "low" || before === "high" || after === "low" || after === "high") && before !== after
+      const name = (t as Record<string, string>)[after] ?? after
+      api.ui.toast({ variant: "info", title: `${t.set}: ${name}`, message: [level !== after ? t.asLow : "", prefixChanged ? t.reread : ""].filter(Boolean).join(" ") || " " })
+    } catch {
+      api.ui.toast({ variant: "error", message: t.failed })
+    }
+  }
+  const openThink = () => {
+    const t = THINK_TEXT[chipLang()] as Record<string, string>
+    const th = model().think
+    if (!th || !th.effective) {
+      api.ui.toast({ variant: "warning", message: t.none })
+      return
+    }
+    api.ui.dialog.replace(() => (
+      <api.ui.DialogSelect
+        title={t.title}
+        options={["off", "low", "medium", "high"].map((level) => ({
+          title: t[level] + (th.effective === level ? t.current : ""),
+          value: level,
+          description: t[level + "D"] + (!th.available.includes(level) ? ` (${t.asLow})` : ""),
+          category: t.set,
+        }))}
+        onSelect={(o) => {
+          api.ui.dialog.clear()
+          void setThink(String(o.value))
+        }}
+      />
+    ))
+  }
   // /guide: every command, what it does, where it works; pick one for the details.
   const openGuide = () => {
     const l = lang()
@@ -303,6 +467,30 @@ const tui: TuiPlugin = async (api, options) => {
   }
   api.command?.register(() => [
     {
+      title: chipLang() === "ru" ? "Контекст: Авто" : "Context: Auto",
+      value: "shuracode.context.auto",
+      description: chipLang() === "ru" ? "быстрый режим; контекст расширяется сам, когда разговор растёт" : "the fast mode; the context grows by itself when the conversation does",
+      category: "ShuraCode",
+      slash: { name: "auto" },
+      onSelect: () => void setContextMode("auto"),
+    },
+    {
+      title: chipLang() === "ru" ? `Контекст: Расширенный (${contextSize(model().context?.long) || "200K"})` : `Context: Extended (${contextSize(model().context?.long) || "200K"})`,
+      value: "shuracode.context.extended",
+      description: chipLang() === "ru" ? "сразу большое окно, без переключений; генерация медленнее" : "the large window from the start, no switches; slower generation",
+      category: "ShuraCode",
+      slash: { name: "extended" },
+      onSelect: () => void setContextMode("extended"),
+    },
+    {
+      title: chipLang() === "ru" ? "Мышление: выкл · кратко · обычно · глубоко" : "Thinking: off · brief · normal · deep",
+      value: "shuracode.think",
+      description: chipLang() === "ru" ? "сколько модель рассуждает перед ответом" : "how much the model thinks before answering",
+      category: "ShuraCode",
+      slash: { name: "think" },
+      onSelect: () => openThink(),
+    },
+    {
       title: "Command reference",
       value: "shuracode.guide",
       description: "every command and key, what it does",
@@ -337,6 +525,15 @@ const tui: TuiPlugin = async (api, options) => {
     slots: {
       home_logo() {
         return <Logo api={api} />
+      },
+      app_bottom() {
+        // its own line under the prompt, in the chat and on the home screen: the prompt's right corner is too narrow
+        return (
+          <box width="100%" paddingLeft={2} paddingRight={2} flexDirection="row" flexShrink={0}>
+            <box flexGrow={1} />
+            <ContextChip api={api} model={model} />
+          </box>
+        )
       },
       home_prompt(_ctx, props) {
         return (
