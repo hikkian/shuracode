@@ -26,7 +26,9 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-LAUNCHER = Path(__file__).resolve().parent.parent / "bin" / "shuracode"
+ROOT = Path(__file__).resolve().parent.parent
+LAUNCHER = ROOT / "bin" / "shuracode"
+ENGINE = Path(os.environ.get("SHURACODE_ENGINE", Path.home() / ".local/share/shuracode/libexec/shuracode"))
 CHECKS = {
     "plugin logo": re.compile(r"your local coding council"),
     "footer brand": re.compile(r"ShuraCode|Shura\s*Code"),
@@ -37,7 +39,7 @@ ANSI = re.compile(r"\x1b\[[0-9;?<>=]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\
 
 
 def identity_check():
-    """Run `shuracode run` against a local fake endpoint and inspect the system prompt it sends."""
+    """Check local plugin identity and model-harness selection without reading live user config."""
     seen = []
 
     class Endpoint(BaseHTTPRequestHandler):
@@ -47,7 +49,9 @@ def identity_check():
         def do_POST(self):
             req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             if req.get("tools"):
-                seen.append(req["messages"][0]["content"])
+                system = "\n".join(str(message.get("content", "")) for message in req.get("messages", [])
+                                     if message.get("role") == "system")
+                seen.append(system)
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.end_headers()
@@ -59,27 +63,85 @@ def identity_check():
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Endpoint)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    workdir = tempfile.mkdtemp(prefix="shuracode-selftest-")
-    override = {"provider": {"tiel-local": {"options": {"baseURL": f"http://127.0.0.1:{server.server_port}/v1"}}},
-                "mcp": {"playwright": {"enabled": False}, "searxng": {"enabled": False}}}
-    env = {**os.environ, "PWD": workdir, "OPENCODE_CONFIG_CONTENT": json.dumps(override)}
+    cases = (
+        ("tiel-local/tiel-coder", "tiel-coder", "tiel"),
+        ("tiel-local/occamy", "occamy", "occamy"),
+        ("gemma-local/gemma", "gemma", "gemma"),
+    )
+    passed = True
     try:
-        subprocess.run([str(LAUNCHER), "run", "self-test"], cwd=workdir, env=env, stdin=subprocess.DEVNULL,
-                       capture_output=True, timeout=90)
-    except subprocess.TimeoutExpired:
-        pass
-    server.shutdown()
-    shutil.rmtree(workdir, ignore_errors=True)
-    system = seen[-1] if seen else ""
-    results = {
-        "system prompt reached the model": bool(system),
-        "agent introduces itself as ShuraCode": "You are ShuraCode" in system,
-        "and names the model it runs on": bool(re.search(r"You are ShuraCode, running fully locally on the \S", system)),
-        "no 'You are opencode'": bool(system) and not re.search(r"You are opencode\b", system),
-    }
-    for name, ok in results.items():
-        print(f"  {'ok  ' if ok else 'FAIL'} {name}")
-    return all(results.values())
+        with tempfile.TemporaryDirectory(prefix="shuracode-selftest-") as tmp:
+            tmp_path = Path(tmp)
+            harness_dir = tmp_path / "harness"
+            for _, _, key in cases:
+                folder = harness_dir / key
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / "harness.md").write_text(f"SELFTEST_HARNESS_{key.upper()}", encoding="utf-8")
+
+            # Exercise the already-branded introduction too: server.ts should enrich it with the selected model.
+            already_branded = tmp_path / "already-branded.md"
+            already_branded.write_text("You are ShuraCode, an interactive CLI tool.", encoding="utf-8")
+
+            template = (ROOT / "config" / "shuracode.json.in").read_text(encoding="utf-8")
+            template = template.replace("@REPO_DIR@", str(ROOT))
+            template = template.replace("@BASE_URL@", f"http://127.0.0.1:{server.server_port}/v1")
+            config = json.loads(template)
+            config["instructions"] = [str(already_branded)]
+            for entry in config.get("mcp", {}).values():
+                entry["enabled"] = False
+            for entry in config.get("plugin", []):
+                if isinstance(entry, list) and entry[0].endswith("/plugin/model-harness.ts"):
+                    entry[1]["harnessDir"] = str(harness_dir)
+
+            config_dir = tmp_path / "config"
+            config_dir.mkdir()
+            config_path = config_dir / "shuracode.json"
+            data_dir = tmp_path / "data"
+            env = {
+                **os.environ,
+                "HOME": str(tmp_path),
+                "PWD": str(tmp_path),
+                "XDG_CONFIG_HOME": str(tmp_path / "xdg-config"),
+                "XDG_DATA_HOME": str(data_dir),
+                "XDG_CACHE_HOME": str(tmp_path / "xdg-cache"),
+                "OPENCODE_CONFIG": str(config_path),
+                "OPENCODE_CONFIG_DIR": str(config_dir),
+                "OPENCODE_DISABLE_AUTOUPDATE": "1",
+                "OPENCODE_DISABLE_SHARE": "1",
+                "OPENCODE_DISABLE_MODELS_FETCH": "1",
+                "OPENCODE_DISABLE_DEFAULT_PLUGINS": "1",
+                "NO_COLOR": "1",
+            }
+            for qualified_model, model_id, key in cases:
+                seen.clear()
+                config["model"] = qualified_model
+                config["small_model"] = qualified_model
+                config_path.write_text(json.dumps(config), encoding="utf-8")
+                try:
+                    subprocess.run([str(ENGINE), "run", "self-test"], cwd=tmp, env=env,
+                                   stdin=subprocess.DEVNULL, capture_output=True, timeout=90)
+                except subprocess.TimeoutExpired:
+                    pass
+                system = seen[-1] if seen else ""
+                intro = re.search(r"You are ShuraCode, running fully locally on the ([^,]+) model,", system)
+                has_name = bool(intro and any(label.casefold() in intro.group(1).casefold()
+                                               for label in (model_id, config["provider"][qualified_model.split("/", 1)[0]]["models"][model_id]["name"].split(" (", 1)[0])))
+                has_harness = f"SELFTEST_HARNESS_{key.upper()}" in system
+                has_already_branded = bool(intro and f"You are ShuraCode, running fully locally on the {intro.group(1)} model, an interactive CLI tool." in system)
+                no_engine_name = bool(system) and not re.search(r"You are opencode\b", system)
+                for label, ok in (
+                    (f"system prompt reached the model ({qualified_model})", bool(system)),
+                    (f"names the selected model ({qualified_model})", has_name),
+                    (f"model harness survives ({qualified_model})", has_harness),
+                    (f"already-branded intro names the model ({qualified_model})", has_already_branded),
+                    (f"no 'You are opencode' ({qualified_model})", no_engine_name),
+                ):
+                    print(f"  {'ok  ' if ok else 'FAIL'} {label}")
+                    passed = passed and ok
+    finally:
+        server.shutdown()
+        server.server_close()
+    return passed
 
 
 def launcher_output_limit_check():

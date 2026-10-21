@@ -18,15 +18,20 @@ export function rebrand(text: string, model?: string): string {
   const intro = name ? `You are ShuraCode, running fully locally on the ${name} model,` : "You are ShuraCode,"
   return REPLACEMENTS.reduce((out, [pattern, value]) => out.replace(pattern, value), text)
     .replace(/\bYou are opencode,/g, intro)
+    // Another loaded branding hook may already have renamed the engine before this one runs.
+    .replace(/\bYou are ShuraCode,(?! running fully locally on the )/g, intro)
 }
 
 const plugin: PluginModule & { id: string } = {
   id: "shuracode-server",
   server: async () => ({
     "experimental.chat.system.transform": async (input, output) => {
+      // The engine may expose only the stable model id here (the harness plugin keys on it too).
+      // Prefer its configured display name, then fall back so the identity never loses the model.
+      const model = input.model?.name?.trim() || input.model?.id
       // edit in place: the engine keeps using the same array after the hook returns
       output.system.forEach((text, i) => {
-        output.system[i] = rebrand(text, input.model?.name)
+        output.system[i] = rebrand(text, model)
       })
     },
   }),
