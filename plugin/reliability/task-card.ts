@@ -1,5 +1,4 @@
 import type { PluginModule } from "@opencode-ai/plugin"
-import { tool } from "@opencode-ai/plugin"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { estimateTokens, isEditTool, renderTaskCard } from "./core.ts"
@@ -92,24 +91,32 @@ const plugin: PluginModule & { id: string } = {
       },
     }
     if (enabled) {
+      // Use a package-independent JSON Schema object; isolated configs may omit the plugin package's sibling zod dependency.
       hooks.tool = {
-        shura_task_card: tool({
-          description: "Update the concise task card (goal, plan, done, next) that is reinserted into context every turn.",
+        shura_task_card: {
+          description: "Update the concise task card (goal, plan, done, next) that is reinserted into context every turn. Send all four fields; use null to leave a field unchanged.",
           args: {
-            goal: tool.schema.string().max(400).optional(),
-            plan: tool.schema.array(tool.schema.string().max(200)).max(12).optional(),
-            done: tool.schema.array(tool.schema.string().max(160)).max(8).optional(),
-            next: tool.schema.string().max(200).optional(),
+            goal: { anyOf: [{ type: "string", maxLength: 400 }, { type: "null" }], description: "Task goal, or null to keep it unchanged." },
+            plan: { anyOf: [{ type: "array", items: { type: "string", maxLength: 200 }, maxItems: 12 }, { type: "null" }], description: "Plan steps, or null to keep them unchanged." },
+            done: { anyOf: [{ type: "array", items: { type: "string", maxLength: 160 }, maxItems: 8 }, { type: "null" }], description: "Completed steps, or null to keep them unchanged." },
+            next: { anyOf: [{ type: "string", maxLength: 200 }, { type: "null" }], description: "Next step, or null to keep it unchanged." },
           },
           async execute(args, context) {
+            const valid = (value: unknown, check: (value: any) => boolean) => value === null || check(value)
+            if (!valid(args.goal, (value: any) => typeof value === "string" && value.length <= 400)
+              || !valid(args.plan, (value: any) => Array.isArray(value) && value.length <= 12 && value.every((item: any) => typeof item === "string" && item.length <= 200))
+              || !valid(args.done, (value: any) => Array.isArray(value) && value.length <= 8 && value.every((item: any) => typeof item === "string" && item.length <= 160))
+              || !valid(args.next, (value: any) => typeof value === "string" && value.length <= 200)) {
+              return { title: "Invalid task card", output: "Task card fields did not match the declared limits; no changes were made." }
+            }
             const card = get(context.sessionID)
-            if (args.goal !== undefined) card.goal = args.goal
-            if (args.plan !== undefined) card.plan = args.plan
-            if (args.done !== undefined) card.done = args.done
-            if (args.next !== undefined) card.next = args.next
+            if (args.goal !== null) card.goal = args.goal
+            if (args.plan !== null) card.plan = args.plan
+            if (args.done !== null) card.done = args.done
+            if (args.next !== null) card.next = args.next
             return { title: "Task card updated", output: renderTaskCard(card) }
           },
-        }),
+        },
       }
     }
     return hooks
