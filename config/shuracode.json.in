@@ -73,7 +73,8 @@
     ["@REPO_DIR@/plugin/reliability/completion-gate.ts", { "completionGate": false }],
     ["@REPO_DIR@/plugin/reliability/soft-edit.ts", { "softEdit": false }],
     ["@REPO_DIR@/plugin/reliability/loop-detector.ts", { "loopDetector": false }],
-    ["@REPO_DIR@/plugin/reliability/task-card.ts", { "taskCard": false }]
+    ["@REPO_DIR@/plugin/reliability/task-card.ts", { "taskCard": false }],
+    ["@REPO_DIR@/plugin/visible-tests.ts", { "visibleTests": false }]
   ],
   "instructions": ["~/.config/shuracode/AGENTS.md", "~/.local/share/shuracode/memory/MEMORY.md"],
   "agent": {
