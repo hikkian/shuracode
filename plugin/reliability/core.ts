@@ -48,11 +48,16 @@ export function stableArgs(value: unknown): string {
   return JSON.stringify(value) ?? String(value)
 }
 
+// A verification is a run of the project's own tests or build. Small local models often verify with ad-hoc scripts instead
+// (`python3 check.py`, `node -e ...`): those are not counted, so the gate still asks for the real test run (FABLE3:
+// 24 % of the eval tasks ended with edits and no project test run; most had such scripts).
+const VERIFICATION = /\b(pytest|unittest|tox|nox|python3?\s+-m\s+(pytest|unittest|tox)|python3?\s+\S*test\S*\.py|npm\s+(test|run\s+(test|build|check))|pnpm\s+(test|run\s+test)|yarn\s+test|npx\s+(jest|vitest|mocha|ava|playwright\s+test)|node\s+--test|node\s+\S*test\S*\.[cm]?js|bun\s+test|deno\s+test|jest|vitest|mocha|go\s+test|cargo\s+(test|check|build)|gradle(w)?\s+(test|build|check)|mvn\s+(test|verify)|dotnet\s+test|cmake\s+--build|ctest|make\s+(test|check)|rspec|php\s+artisan\s+test|phpunit)\b/i
+
 export function isVerificationCommand(tool: string, args: unknown): boolean {
   if (!/^(bash|shell|terminal|command)$/i.test(tool)) return false
   const record = args && typeof args === "object" ? args as Record<string, unknown> : {}
   const command = String(record.command ?? record.cmd ?? record.script ?? "")
-  return /\b(pytest|unittest|npm\s+(test|run\s+(test|build))|jest|go\s+test|cargo\s+test|gradle(w)?\s+(test|build)|cmake\s+--build|ctest|make\s+(test|check))\b/i.test(command)
+  return VERIFICATION.test(command)
 }
 
 export function isSuccessfulCheck(output: any): boolean {
@@ -60,8 +65,11 @@ export function isSuccessfulCheck(output: any): boolean {
   const code = metadata.exit ?? metadata.exitCode ?? metadata.code
   if (typeof code === "number") return code === 0
   const text = String(output?.output ?? metadata.output ?? "")
-  return /\b(\d+ passed|all tests passed|build successful|build succeeded|tests? passed|ok\s+\S+\s+\d)/i.test(text)
-    && !/\b(failed|error:|errors? occurred|tests? failed)\b/i.test(text)
+  // unittest: "Ran 3 tests ... OK"; node:test: "# pass 3 ... # fail 0"; mocha: "3 passing"; pytest: "3 passed"
+  const positive = /\b(\d+ passed|all tests passed|build successful|build succeeded|tests? passed|ok\s+\S+\s+\d|\d+ passing)\b/i.test(text)
+    || /# pass \d+/.test(text) || /^\s*OK\s*$/m.test(text)
+  const negative = /\b(failed|error:|errors? occurred|tests? failed|\d+ failing|FAILED)\b/.test(text) || /# fail [1-9]/.test(text)
+  return positive && !negative
 }
 
 export function isEditTool(name: string): boolean {

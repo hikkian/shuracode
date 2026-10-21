@@ -1,5 +1,5 @@
 import type { PluginModule } from "@opencode-ai/plugin"
-import { isEditTool, isSuccessfulCheck } from "./core.ts"
+import { isEditTool, isSuccessfulCheck, isVerificationCommand } from "./core.ts"
 
 type GateState = { changed: boolean; verified: boolean; nudges: number; pending: boolean }
 
@@ -31,7 +31,7 @@ const plugin: PluginModule & { id: string } = {
         if (!enabled) return
         const value = get(hook.sessionID)
         if (isEditTool(hook.tool)) value.changed = true
-        if (isSuccessfulCheck(output)) value.verified = true
+        if (isVerificationCommand(hook.tool, hook.args) && isSuccessfulCheck(output)) value.verified = true
       },
       event: async ({ event }) => {
         if (!enabled || event.type !== "session.idle") return
