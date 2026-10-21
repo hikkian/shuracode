@@ -40,6 +40,30 @@
           }
         }
       }
+    },
+    "gemma-local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Shura (local, Gemma)",
+      "options": {
+        "baseURL": "@BASE_URL@"
+      },
+      "models": {
+        "gemma": {
+          "name": "Gemma 4 26B-A4B (local, 32K ctx)",
+          "attachment": true,
+          "modalities": { "input": ["text", "image"], "output": ["text"] },
+          "limit": { "context": 32768, "output": 16384 },
+          "options": { "temperature": 0.6, "top_p": 0.95, "top_k": 20 },
+          "settings": { "reasoningEffort": "medium" },
+          "variants": {
+            "fast": { "settings": { "reasoningEffort": "minimal" } },
+            "low": { "settings": { "reasoningEffort": "low" } },
+            "medium": { "settings": { "reasoningEffort": "medium" } },
+            "high": { "settings": { "reasoningEffort": "high" } },
+            "max": { "settings": { "reasoningEffort": "max" } }
+          }
+        }
+      }
     }
   },
   "model": "tiel-local/tiel-coder",
