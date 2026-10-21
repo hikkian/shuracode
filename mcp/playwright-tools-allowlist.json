@@ -11,6 +11,5 @@
   "browser_wait_for",
   "browser_press_key",
   "browser_evaluate",
-  "browser_tabs",
-  "browser_close"
+  "browser_tabs"
 ]
