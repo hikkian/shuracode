@@ -6,6 +6,7 @@ import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plug
 import { RGBA, TextAttributes } from "@opentui/core"
 import { createMemo, createRoot, createSignal, createEffect, For, Show } from "solid-js"
 import { readdirSync, readFileSync } from "node:fs"
+import { EFFORT_LEVELS, EFFORT_TEXT, describeLevel, effortChip, rereadNeeded, type EffortStatus } from "./lib/effort.ts"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
@@ -76,7 +77,7 @@ function Logo(props: { api: TuiPluginApi }) {
 // ------------------------------------------------------------------------------------------ live status
 type Context = { mode: "auto" | "extended"; window?: number; short?: number; long?: number; available: boolean }
 type Switch = { to: "long" | "short"; eta: number; startedAt: number }
-type Think = { level: string; effective: string | null; available: string[]; isDefault: boolean }
+type Think = EffortStatus
 type Reading = { processed: number; total: number; cache: number; eta: number }
 type Model = {
   state: "ready" | "loading" | "sleeping" | "off" | "offline" | "none"; detail: string; terse?: boolean; terseSupported?: boolean
@@ -103,7 +104,7 @@ function readExtras(s: Record<string, any>): Pick<Model, "context" | "switching"
   const t = s.think
   if (t && typeof t === "object") {
     out.think = { level: String(t.level || "medium"), effective: t.effective ?? null, available: Array.isArray(t.available) ? t.available : [],
-      isDefault: !!t.default }
+      isDefault: !!t.default, budget: t.budget && typeof t.budget === "object" ? { target: t.budget.target ?? null, ceiling: t.budget.ceiling ?? null } : null }
   }
   return out
 }
@@ -189,10 +190,8 @@ function ModelBadge(props: { api: TuiPluginApi; model: () => Model; compact?: bo
 }
 
 const CHIP: Record<"en" | "ru", Record<string, string>> = {
-  en: { auto: "auto", extended: "extended", toLong: "Expanding context to", toShort: "Back to the fast mode", think: "thinking", reading: "Reading the context",
-    off: "off", low: "brief", medium: "normal", high: "deep", s: "s" },
-  ru: { auto: "авто", extended: "расширенный", toLong: "Расширяю контекст до", toShort: "Возвращаюсь в быстрый режим", think: "мышление", reading: "Читаю контекст",
-    off: "выкл", low: "кратко", medium: "обычно", high: "глубоко", s: "с" },
+  en: { auto: "auto", extended: "extended", toLong: "Expanding context to", toShort: "Back to the fast mode", reading: "Reading the context", s: "s" },
+  ru: { auto: "авто", extended: "расширенный", toLong: "Расширяю контекст до", toShort: "Возвращаюсь в быстрый режим", reading: "Читаю контекст", s: "с" },
 }
 const chipLang = (): "en" | "ru" => (lang() === "ru" ? "ru" : "en")
 
@@ -216,8 +215,8 @@ function ContextChip(props: { api: TuiPluginApi; model: () => Model }) {
     }
     if (!m.context?.available) return undefined
     const mode = m.context.mode === "extended" ? t.extended : t.auto
-    const thinking = m.think && m.think.effective && m.think.effective !== "medium" ? ` · ${t.think}: ${t[m.think.effective] ?? m.think.effective}` : ""
-    return { busy: false, label: `${mode} · ${contextSize(m.context.window)}${thinking}` }
+    const effort = effortChip(m.think, chipLang())        // EFFORT1: the slider's position, always visible
+    return { busy: false, label: `${mode} · ${contextSize(m.context.window)}${effort ? ` · ${effort}` : ""}` }
   })
   return (
     <Show when={text()}>
@@ -387,58 +386,46 @@ const tui: TuiPlugin = async (api, options) => {
       api.ui.toast({ variant: "error", message: t.failed })
     }
   }
-  // /think: the thinking level (THINK2). Brief and deep put a line at the start of the prompt, so changing to or from them
-  // makes the next reply read the conversation again once; off and normal do not.
-  const THINK_TEXT = {
-    en: {
-      title: "Thinking (Esc to close)", off: "Off", low: "Brief", medium: "Normal", high: "Deep",
-      offD: "answers right away; for simple questions", lowD: "a short think", mediumD: "the default", highD: "thinks longer; for hard tasks",
-      reread: "The next reply reads the conversation again once.", none: "This model has no thinking levels.",
-      asLow: "this model cannot switch thinking off; it thinks briefly", failed: "Could not reach the gateway; the thinking level is unchanged.",
-      set: "Thinking", current: " (current)",
-    },
-    ru: {
-      title: "Мышление (Esc: закрыть)", off: "Выкл", low: "Кратко", medium: "Обычно", high: "Глубоко",
-      offD: "ответ сразу; для простых вопросов", lowD: "немного подумать", mediumD: "по умолчанию", highD: "дольше; для сложных задач",
-      reread: "Следующий ответ один раз заново прочитает разговор.", none: "У этой модели нет уровней мышления.",
-      asLow: "эта модель не умеет выключать рассуждение; будет рассуждать кратко", failed: "Не удалось связаться со шлюзом; уровень мышления не изменён.",
-      set: "Мышление", current: " (сейчас)",
-    },
-  }
-  const setThink = async (level: string) => {
-    const t = THINK_TEXT[chipLang()]
+  // /effort (alias /think): the effort slider (EFFORT1, THINK2 before it). The gateway keeps the level for the session and
+  // turns it into the template switch and the reasoning budget; the picker shows what each level does and sends.
+  const setEffort = async (level: string) => {
+    const t = EFFORT_TEXT[chipLang()]
     const before = model().think?.effective ?? "medium"
     try {
-      const res = await fetch(guardianBase + "think-" + level, { method: "POST", signal: AbortSignal.timeout(3000) })
+      let res = await fetch(guardianBase + "effort-" + level, { method: "POST", signal: AbortSignal.timeout(3000) })
+      if (res.status === 404 && level !== "max") {   // a gateway from before EFFORT1 knows the switch as think-<level>, without max
+        res = await fetch(guardianBase + "think-" + level, { method: "POST", signal: AbortSignal.timeout(3000) })
+      }
       if (!res.ok) throw new Error(String(res.status))
       const th = (await res.json()) as Record<string, any>
       const after = String(th.effective ?? "medium")
-      const prefixChanged = (before === "low" || before === "high" || after === "low" || after === "high") && before !== after
-      const name = (t as Record<string, string>)[after] ?? after
-      api.ui.toast({ variant: "info", title: `${t.set}: ${name}`, message: [level !== after ? t.asLow : "", prefixChanged ? t.reread : ""].filter(Boolean).join(" ") || " " })
+      const name = t[after] ?? after
+      const notes = [level !== after ? `${t.asFallback} ${name}` : "", rereadNeeded(before, after) ? t.reread : ""].filter(Boolean)
+      api.ui.toast({ variant: "info", title: `${t.set}: ${name}`, message: notes.join(" ") || " " })
     } catch {
       api.ui.toast({ variant: "error", message: t.failed })
     }
   }
-  const openThink = () => {
-    const t = THINK_TEXT[chipLang()] as Record<string, string>
+  const openEffort = () => {
+    const t = EFFORT_TEXT[chipLang()]
     const th = model().think
     if (!th || !th.effective) {
       api.ui.toast({ variant: "warning", message: t.none })
       return
     }
+    const budgetFor = (level: string) => (level === th.effective ? th.budget : undefined)   // the gateway reports the current level's budget
     api.ui.dialog.replace(() => (
       <api.ui.DialogSelect
         title={t.title}
-        options={["off", "low", "medium", "high"].map((level) => ({
+        options={EFFORT_LEVELS.map((level) => ({
           title: t[level] + (th.effective === level ? t.current : ""),
           value: level,
-          description: t[level + "D"] + (!th.available.includes(level) ? ` (${t.asLow})` : ""),
+          description: describeLevel(level, th, chipLang(), budgetFor),
           category: t.set,
         }))}
         onSelect={(o) => {
           api.ui.dialog.clear()
-          void setThink(String(o.value))
+          void setEffort(String(o.value))
         }}
       />
     ))
@@ -495,12 +482,12 @@ const tui: TuiPlugin = async (api, options) => {
       onSelect: () => void setContextMode("extended"),
     },
     {
-      title: chipLang() === "ru" ? "Мышление: выкл · кратко · обычно · глубоко" : "Thinking: off · brief · normal · deep",
-      value: "shuracode.think",
-      description: chipLang() === "ru" ? "сколько модель рассуждает перед ответом" : "how much the model thinks before answering",
+      title: chipLang() === "ru" ? "Усилие: выкл, низкое, среднее, высокое, максимум" : "Effort: off, low, medium, high, max",
+      value: "shuracode.effort",
+      description: chipLang() === "ru" ? "сколько модель думает перед ответом; уровень на сессию" : "how much the model thinks before answering; kept for the session",
       category: "ShuraCode",
-      slash: { name: "think" },
-      onSelect: () => openThink(),
+      slash: { name: "effort", aliases: ["think"] },
+      onSelect: () => openEffort(),
     },
     {
       title: "Command reference",

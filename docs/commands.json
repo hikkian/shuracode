@@ -38,6 +38,15 @@
    "source": "engine"
   },
   {
+   "id": "effort",
+   "name": "/effort",
+   "category": "Model",
+   "en": "Effort level: off (answers right away), low, medium (default), high, max. The level is kept for the session; each level sets how much the model may think (a soft target and a ceiling with a graceful wrap-up). Switching between off/medium, low and high/max makes the next reply read the conversation again once. /think is the same command.",
+   "ru": "Уровень усилия: выкл (ответ сразу), низкое, среднее (по умолчанию), высокое, максимум. Уровень хранится на сессию; каждый уровень задаёт, сколько модель может думать (мягкая цель и потолок с мягким завершением). Переход между выкл/среднее, низкое и высокое/максимум: следующий ответ один раз заново прочитает разговор. /think — та же команда.",
+   "kk": "Күш деңгейі: өшірулі (жауап бірден), төмен, орташа (әдепкі), жоғары, максимум. Деңгей сессияға сақталады; әр деңгей модельдің қанша ойлана алатынын белгілейді (жұмсақ мақсат және жұмсақ аяқталатын шек). Өшірулі/орташа, төмен және жоғары/максимум арасында ауысқанда келесі жауап әңгімені бір рет қайта оқиды. /think — сол команда.",
+   "source": "shuracode"
+  },
+  {
    "id": "extended",
    "name": "/extended",
    "category": "Model",
@@ -79,15 +88,6 @@
    "models": [
     "tiel-coder"
    ]
-  },
-  {
-   "id": "think",
-   "name": "/think",
-   "category": "Model",
-   "en": "Thinking level: off (answers right away), brief, normal (default), deep (thinks longer, for hard tasks). Switching to or from brief/deep makes the next reply read the conversation again once.",
-   "ru": "Уровень мышления: выкл (ответ сразу), кратко, обычно (по умолчанию), глубоко (дольше, для сложных задач). Переход на «кратко»/«глубоко» или с них: следующий ответ один раз заново прочитает разговор.",
-   "kk": "Ойлау деңгейі: өшірулі (жауап бірден), қысқа, қалыпты (әдепкі), терең (ұзағырақ, күрделі тапсырмалар үшін). «Қысқа»/«терең» деңгейіне не одан ауысқанда келесі жауап әңгімені бір рет қайта оқиды.",
-   "source": "shuracode"
   },
   {
    "id": "forget",
