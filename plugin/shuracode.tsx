@@ -6,7 +6,7 @@ import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@opencode-ai/plug
 import { RGBA, TextAttributes } from "@opentui/core"
 import { createMemo, createRoot, createSignal, createEffect, For, Show } from "solid-js"
 import { readdirSync, readFileSync } from "node:fs"
-import { EFFORT_LEVELS, EFFORT_TEXT, describeLevel, effortChip, rereadNeeded, type EffortStatus } from "./lib/effort.ts"
+import { EFFORT_LEVELS, EFFORT_TEXT, budgetText, describeLevel, effortChip, pickerTitle, rereadNeeded, titleFor, type EffortStatus } from "./lib/effort.ts"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
@@ -400,8 +400,9 @@ const tui: TuiPlugin = async (api, options) => {
       const th = (await res.json()) as Record<string, any>
       const after = String(th.effective ?? "medium")
       const name = t[after] ?? after
-      const notes = [level !== after ? `${t.asFallback} ${name}` : "", rereadNeeded(before, after) ? t.reread : ""].filter(Boolean)
-      api.ui.toast({ variant: "info", title: `${t.set}: ${name}`, message: notes.join(" ") || " " })
+      const budget = budgetText(th.budget && typeof th.budget === "object" ? { target: th.budget.target ?? null, ceiling: th.budget.ceiling ?? null } : null, chipLang())
+      const notes = [budget, level !== after ? `${t.asFallback} ${name}` : "", rereadNeeded(before, after) ? t.reread : ""].filter(Boolean)
+      api.ui.toast({ variant: "info", title: `${t.set}: ${name}`, message: notes.join(" · ") || " " })
     } catch {
       api.ui.toast({ variant: "error", message: t.failed })
     }
@@ -413,14 +414,13 @@ const tui: TuiPlugin = async (api, options) => {
       api.ui.toast({ variant: "warning", message: t.none })
       return
     }
-    const budgetFor = (level: string) => (level === th.effective ? th.budget : undefined)   // the gateway reports the current level's budget
     api.ui.dialog.replace(() => (
       <api.ui.DialogSelect
-        title={t.title}
+        title={pickerTitle(th, chipLang())}
         options={EFFORT_LEVELS.map((level) => ({
-          title: t[level] + (th.effective === level ? t.current : ""),
+          title: titleFor(level, th, chipLang()),
           value: level,
-          description: describeLevel(level, th, chipLang(), budgetFor),
+          description: describeLevel(level, th, chipLang()),
           category: t.set,
         }))}
         onSelect={(o) => {

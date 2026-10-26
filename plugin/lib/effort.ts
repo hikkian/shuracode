@@ -15,13 +15,13 @@ export type EffortStatus = {
 
 export const EFFORT_TEXT: Record<EffortLang, Record<string, string>> = {
   en: {
-    title: "Effort (Esc to close)", set: "Effort", current: " (current)", chip: "effort",
+    title: "Effort (Esc to close)", esc: "(Esc to close)", set: "Effort", current: " (current)", chip: "effort",
     off: "off", low: "low", medium: "medium", high: "high", max: "max",
-    offD: "answers right away, no thinking; for simple questions",
-    lowD: "a short think; quick answers and small edits",
-    mediumD: "the default: the model decides how much to think",
-    highD: "thinks longer and checks itself; for hard tasks",
-    maxD: "as long as it needs, up to the largest budget; for the hardest tasks, slow",
+    offD: "no thinking; simple questions",
+    lowD: "a short think; quick, small edits",
+    mediumD: "the default; the model decides",
+    highD: "longer, checks itself; hard tasks",
+    maxD: "as long as it needs; slow",
     reread: "The next reply reads the conversation again once.",
     none: "This model has no effort levels.",
     asFallback: "this model has no such level; it runs at",
@@ -29,13 +29,13 @@ export const EFFORT_TEXT: Record<EffortLang, Record<string, string>> = {
     budget: "budget", tokens: "tokens", unlimited: "no ceiling",
   },
   ru: {
-    title: "Усилие (Esc: закрыть)", set: "Усилие", current: " (сейчас)", chip: "усилие",
+    title: "Усилие (Esc: закрыть)", esc: "(Esc: закрыть)", set: "Усилие", current: " (сейчас)", chip: "усилие",
     off: "выкл", low: "низкое", medium: "среднее", high: "высокое", max: "максимум",
-    offD: "ответ сразу, без рассуждения; для простых вопросов",
-    lowD: "короткое рассуждение; быстрые ответы и мелкие правки",
-    mediumD: "по умолчанию: модель сама решает, сколько думать",
-    highD: "думает дольше и проверяет себя; для сложных задач",
-    maxD: "сколько потребуется, до самого большого бюджета; для самых трудных задач, медленно",
+    offD: "без рассуждения; простые вопросы",
+    lowD: "коротко думает; быстрые правки",
+    mediumD: "по умолчанию; модель решает сама",
+    highD: "дольше, проверяет себя; сложное",
+    maxD: "сколько нужно; самое трудное",
     reread: "Следующий ответ один раз заново прочитает разговор.",
     none: "У этой модели нет уровней усилия.",
     asFallback: "у этой модели нет такого уровня; она работает на",
@@ -63,13 +63,29 @@ export function effortChip(think: EffortStatus | undefined, lang: EffortLang): s
   return `${t.chip}: ${t[think.effective] ?? think.effective}`
 }
 
-// One line under a level in the picker: what it does, the fallback note and the budget the gateway would send.
-export function describeLevel(level: EffortLevel, think: EffortStatus, lang: EffortLang, budgetFor?: (level: string) => EffortStatus["budget"]): string {
+// A picker row is 52 visible characters: the level and a short description share it, so the budget goes to the dialog
+// title and to the toast after a choice, where there is room.
+export function budgetText(b: EffortStatus["budget"], lang: EffortLang): string {
+  if (!b || b.ceiling == null) return ""
+  return `${b.target != null ? `~${b.target}–` : "≤"}${b.ceiling} ${EFFORT_TEXT[lang].tokens}`
+}
+
+export function titleFor(level: EffortLevel, think: EffortStatus, lang: EffortLang): string {
+  const t = EFFORT_TEXT[lang]
+  return t[level] + (think.effective === level ? t.current : "")
+}
+
+export function pickerTitle(think: EffortStatus, lang: EffortLang): string {
+  const t = EFFORT_TEXT[lang]
+  const budget = budgetText(think.budget, lang)
+  const now = think.effective ? `${t[think.effective] ?? think.effective}${budget ? `: ${budget}` : ""}` : ""
+  return now ? `${t.set} · ${now} ${t.esc}` : t.title
+}
+
+export function describeLevel(level: EffortLevel, think: EffortStatus, lang: EffortLang): string {
   const t = EFFORT_TEXT[lang]
   const parts = [t[level + "D"]]
   if (think.available.length && !think.available.includes(level)) parts.push(`(${t.asFallback} ${t[fallbackOf(level, think.available)] ?? fallbackOf(level, think.available)})`)
-  const b = budgetFor ? budgetFor(level) : undefined
-  if (b && b.ceiling != null) parts.push(`· ${t.budget}: ${b.target != null ? `~${b.target}–` : "≤"}${b.ceiling} ${t.tokens}`)
   return parts.join(" ")
 }
 
