@@ -79,15 +79,21 @@ type Context = { mode: "auto" | "extended"; window?: number; short?: number; lon
 type Switch = { to: "long" | "short"; eta: number; startedAt: number }
 type Think = EffortStatus
 type Reading = { processed: number; total: number; cache: number; eta: number }
+// RAMLOGIC2: the gateway waits a little for RAM before a load (MiB, and when the wait ends in epoch seconds)
+type MemWait = { free: number; need: number; until: number }
 type Model = {
   state: "ready" | "loading" | "sleeping" | "off" | "offline" | "none"; detail: string; terse?: boolean; terseSupported?: boolean
-  context?: Context; switching?: Switch; think?: Think; reading?: Reading
+  context?: Context; switching?: Switch; think?: Think; reading?: Reading; memWait?: MemWait
 }
 // detail: the model name when ready/loading, otherwise a hint
 
 // SWITCHUI1 / THINK2: the context mode, the layout switch in progress and the thinking level, from GET /guardian/status.
-function readExtras(s: Record<string, any>): Pick<Model, "context" | "switching" | "think" | "reading"> {
-  const out: Pick<Model, "context" | "switching" | "think" | "reading"> = {}
+function readExtras(s: Record<string, any>): Pick<Model, "context" | "switching" | "think" | "reading" | "memWait"> {
+  const out: Pick<Model, "context" | "switching" | "think" | "reading" | "memWait"> = {}
+  const rl = s.ram_ladder
+  if (rl && rl.state === "waiting" && Number(rl.need_mib) > 0) {
+    out.memWait = { free: Number(rl.free_mib) || 0, need: Number(rl.need_mib), until: Number(rl.until) || 0 }
+  }
   const pp = s.prompt_progress
   if (pp && pp.state === "reading" && Number(pp.total) > 0) {
     out.reading = { processed: Number(pp.processed) || 0, total: Number(pp.total), cache: Number(pp.cache) || 0, eta: Number(pp.eta_s) || 0 }
@@ -143,7 +149,7 @@ function watchModel(url: string) {
   const loop = async () => {
     await poll()
     const m = model()
-    setTimeout(loop, m.switching || m.reading || m.state === "loading" ? 1000 : 2500)
+    setTimeout(loop, m.switching || m.reading || m.memWait || m.state === "loading" ? 1000 : 2500)
   }
   loop()
   return model
@@ -190,8 +196,10 @@ function ModelBadge(props: { api: TuiPluginApi; model: () => Model; compact?: bo
 }
 
 const CHIP: Record<"en" | "ru", Record<string, string>> = {
-  en: { auto: "auto", extended: "extended", toLong: "Expanding context to", toShort: "Back to the fast mode", reading: "Reading the context", s: "s" },
-  ru: { auto: "авто", extended: "расширенный", toLong: "Расширяю контекст до", toShort: "Возвращаюсь в быстрый режим", reading: "Читаю контекст", s: "с" },
+  en: { auto: "auto", extended: "extended", toLong: "Expanding context to", toShort: "Back to the fast mode", reading: "Reading the context", s: "s",
+        memWait: "Waiting for memory: {free} GiB free, {need} GiB needed", point: "." },
+  ru: { auto: "авто", extended: "расширенный", toLong: "Расширяю контекст до", toShort: "Возвращаюсь в быстрый режим", reading: "Читаю контекст", s: "с",
+        memWait: "Жду память: свободно {free} ГиБ, нужно {need} ГиБ", point: "," },
 }
 const chipLang = (): "en" | "ru" => (lang() === "ru" ? "ru" : "en")
 
@@ -204,6 +212,13 @@ function ContextChip(props: { api: TuiPluginApi; model: () => Model }) {
   const text = createMemo(() => {
     const m = props.model()
     const t = CHIP[chipLang()]
+    // RAMLOGIC2: the gateway waits for RAM before the load; say for what instead of a silent pause
+    if (m.memWait) {
+      const gib = (mib: number) => (mib / 1024).toFixed(1).replace(".", t.point)
+      const left = Math.max(1, Math.round(m.memWait.until - now()))
+      const label = t.memWait.replace("{free}", gib(m.memWait.free)).replace("{need}", gib(m.memWait.need))
+      return { busy: true, label: `${label} · ~${left} ${t.s}` }
+    }
     if (m.switching) {
       const left = Math.max(1, Math.round(m.switching.eta - (now() - m.switching.startedAt)))
       const head = m.switching.to === "long" ? `${t.toLong} ${contextSize(m.context?.long)}` : t.toShort
