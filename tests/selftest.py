@@ -65,6 +65,7 @@ def identity_check():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     cases = (
         ("tiel-local/tiel-coder", "tiel-coder", "tiel"),
+        ("tiel-local/sage", "sage", "sage"),
         ("tiel-local/occamy", "occamy", "occamy"),
         ("gemma-local/gemma", "gemma", "gemma"),
     )
@@ -125,7 +126,7 @@ def identity_check():
                 system = seen[-1] if seen else ""
                 intro = re.search(r"You are ShuraCode, running fully locally on the ([^,]+) model,", system)
                 has_name = bool(intro and any(label.casefold() in intro.group(1).casefold()
-                                               for label in (model_id, config["provider"][qualified_model.split("/", 1)[0]]["models"][model_id]["name"].split(" (", 1)[0])))
+                                               for label in (model_id, re.split(r"\s+[(—]", config["provider"][qualified_model.split("/", 1)[0]]["models"][model_id]["name"])[0])))
                 has_harness = f"SELFTEST_HARNESS_{key.upper()}" in system
                 has_already_branded = bool(intro and f"You are ShuraCode, running fully locally on the {intro.group(1)} model, an interactive CLI tool." in system)
                 no_engine_name = bool(system) and not re.search(r"You are opencode\b", system)

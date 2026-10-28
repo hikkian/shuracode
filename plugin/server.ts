@@ -14,7 +14,8 @@ const REPLACEMENTS: [RegExp, string][] = [
 // ShuraCode is the agent; the model is what it runs on. Name both, taking the model from the config, so the
 // answer to "who are you?" stays true if the model changes.
 export function rebrand(text: string, model?: string): string {
-  const name = (model ?? "").replace(/\s*\(.*\)\s*$/, "").trim()
+  // the display name up to its first " (" or " — ": "Tiel-Coder 35B-A3B (local, 200K ctx) — faster, the default" -> "Tiel-Coder 35B-A3B"
+  const name = (model ?? "").split(/\s+[(—]/)[0].trim()
   const intro = name ? `You are ShuraCode, running fully locally on the ${name} model,` : "You are ShuraCode,"
   return REPLACEMENTS.reduce((out, [pattern, value]) => out.replace(pattern, value), text)
     .replace(/\bYou are opencode,/g, intro)
