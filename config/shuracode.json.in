@@ -10,11 +10,26 @@
       },
       "models": {
         "tiel-coder": {
-          "name": "Tiel-Coder 35B-A3B (local, 200K ctx)",
+          "name": "Tiel-Coder 35B-A3B (local, 200K ctx) — faster, the default",
           "attachment": true,
           "modalities": { "input": ["text", "image"], "output": ["text"] },
           "limit": { "context": 200000, "output": 16384 },
           "options": { "temperature": 0.6, "top_p": 0.95, "top_k": 20 },
+          "settings": { "reasoningEffort": "medium" },
+          "variants": {
+            "fast": { "settings": { "reasoningEffort": "minimal" } },
+            "low": { "settings": { "reasoningEffort": "low" } },
+            "medium": { "settings": { "reasoningEffort": "medium" } },
+            "high": { "settings": { "reasoningEffort": "high" } },
+            "max": { "settings": { "reasoningEffort": "max" } }
+          }
+        },
+        "sage": {
+          "name": "Sage-A1.5 35B-A3B (local, 200K ctx) — stronger on hard tasks",
+          "attachment": true,
+          "modalities": { "input": ["text", "image"], "output": ["text"] },
+          "limit": { "context": 200000, "output": 16384 },
+          "options": { "temperature": 1.0, "top_p": 0.95, "top_k": 20, "presence_penalty": 1.5, "min_p": 0.0 },
           "settings": { "reasoningEffort": "medium" },
           "variants": {
             "fast": { "settings": { "reasoningEffort": "minimal" } },

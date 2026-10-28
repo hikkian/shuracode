@@ -115,6 +115,15 @@ function readExtras(s: Record<string, any>): Pick<Model, "context" | "switching"
   return out
 }
 
+// SAGECFG1: the short name of the loaded model for the chip ("tiel-coder" -> "Tiel", "sage" -> "Sage"); unknown ids as they are
+export function modelChip(id?: string): string {
+  const name = (id ?? "").toLowerCase()
+  for (const [key, label] of [["tiel", "Tiel"], ["sage", "Sage"], ["occamy", "Occamy"], ["gemma", "Gemma"]] as const) {
+    if (name.includes(key)) return label
+  }
+  return id ?? ""
+}
+
 // 45000 -> "45 000"
 const thousands = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ")
 
@@ -231,7 +240,8 @@ function ContextChip(props: { api: TuiPluginApi; model: () => Model }) {
     if (!m.context?.available) return undefined
     const mode = m.context.mode === "extended" ? t.extended : t.auto
     const effort = effortChip(m.think, chipLang())        // EFFORT1: the slider's position, always visible
-    return { busy: false, label: `${mode} · ${contextSize(m.context.window)}${effort ? ` · ${effort}` : ""}` }
+    const model = m.state === "ready" || m.state === "loading" ? modelChip(m.detail) : ""   // SAGECFG1: which model answers
+    return { busy: false, label: `${model ? `${model} · ` : ""}${mode} · ${contextSize(m.context.window)}${effort ? ` · ${effort}` : ""}` }
   })
   return (
     <Show when={text()}>
