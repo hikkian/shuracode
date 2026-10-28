@@ -9,7 +9,8 @@ import plugin from "../plugin/model-harness.ts"
 
 test("the model id picks the harness folder; unknown ids get none", () => {
   assert.equal(harnessKeyFor("tiel-coder"), "tiel")
-  assert.equal(harnessKeyFor("occamy"), "occamy")
+  assert.equal(harnessKeyFor("sage"), "sage")
+  assert.equal(harnessKeyFor("occamy"), null)
   assert.equal(harnessKeyFor("gemma"), "gemma")
   assert.equal(harnessKeyFor("claude-opus-5-5"), null)
   assert.equal(harnessKeyFor(undefined), null)
@@ -18,17 +19,17 @@ test("the model id picks the harness folder; unknown ids get none", () => {
 test("an edit to one model's harness does not change another model's system text", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "model-harness-"))
   try {
-    for (const k of ["tiel", "occamy"]) await mkdir(path.join(dir, k), { recursive: true })
+    for (const k of ["tiel", "sage"]) await mkdir(path.join(dir, k), { recursive: true })
     await writeFile(path.join(dir, "tiel", "harness.md"), "TIEL RULE v1\n")
-    await writeFile(path.join(dir, "occamy", "harness.md"), "OCCAMY RULE v1\n")
+    await writeFile(path.join(dir, "sage", "harness.md"), "SAGE RULE v1\n")
     const hooks = await plugin.server({}, { harnessDir: dir })
     const hook = hooks["experimental.chat.system.transform"]
-    const occamyBefore = { system: ["base"] }
-    await hook({ model: { id: "occamy" } }, occamyBefore)
+    const sageBefore = { system: ["base"] }
+    await hook({ model: { id: "sage" } }, sageBefore)
     await writeFile(path.join(dir, "tiel", "harness.md"), "TIEL RULE v2, edited\n")
-    const occamyAfter = { system: ["base"] }
-    await hook({ model: { id: "occamy" } }, occamyAfter)
-    assert.deepEqual(occamyBefore.system, occamyAfter.system)
+    const sageAfter = { system: ["base"] }
+    await hook({ model: { id: "sage" } }, sageAfter)
+    assert.deepEqual(sageBefore.system, sageAfter.system)
     const tiel = { system: ["base"] }
     await hook({ model: { id: "tiel-coder" } }, tiel)
     assert.match(tiel.system[1], /TIEL RULE v2/)

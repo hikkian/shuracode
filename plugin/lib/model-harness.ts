@@ -3,10 +3,10 @@
 import { readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 
-export const MODEL_KEYS = ["tiel", "sage", "occamy", "gemma"] as const
+export const MODEL_KEYS = ["tiel", "sage", "gemma"] as const
 export type ModelKey = (typeof MODEL_KEYS)[number]
 
-// The model ids the engine reports: the provider's model name (e.g. "tiel-coder", "occamy", "gemma"). Anything else gets no harness.
+// The model ids the engine reports: the provider's model name (e.g. "tiel-coder", "sage", "gemma"). Anything else gets no harness.
 export function harnessKeyFor(modelId: string | undefined): ModelKey | null {
   const id = (modelId ?? "").toLowerCase()
   for (const key of MODEL_KEYS) {

@@ -66,7 +66,6 @@ def identity_check():
     cases = (
         ("tiel-local/tiel-coder", "tiel-coder", "tiel"),
         ("tiel-local/sage", "sage", "sage"),
-        ("tiel-local/occamy", "occamy", "occamy"),
         ("gemma-local/gemma", "gemma", "gemma"),
     )
     passed = True

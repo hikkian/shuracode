@@ -84,9 +84,9 @@
    "id": "models",
    "name": "/models",
    "category": "Model",
-   "en": "List the models and switch between them (Tiel-Coder and Occamy).",
-   "ru": "Список моделей и переключение между ними (Tiel-Coder и Occamy).",
-   "kk": "Модельдер тізімі және олардың арасында ауысу (Tiel-Coder және Occamy).",
+   "en": "List the models and switch between them (Tiel-Coder and Sage).",
+   "ru": "Список моделей и переключение между ними (Tiel-Coder и Sage).",
+   "kk": "Модельдер тізімі және олардың арасында ауысу (Tiel-Coder және Sage).",
    "source": "engine",
    "key": "ctrl+x m"
   },

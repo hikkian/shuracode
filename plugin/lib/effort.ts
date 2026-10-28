@@ -45,7 +45,7 @@ export const EFFORT_TEXT: Record<EffortLang, Record<string, string>> = {
 }
 
 // The template puts a line at the start of the prompt for low and for high/max (one line for both: Sharp says xhigh,
-// Occamy says high), nothing for off and medium. A change of that line makes the next reply re-read the conversation.
+// another template says high), nothing for off and medium. A change of that line makes the next reply re-read the conversation.
 export function promptLineGroup(level: string | null | undefined): "" | "low" | "high" {
   if (level === "low") return "low"
   if (level === "high" || level === "max") return "high"

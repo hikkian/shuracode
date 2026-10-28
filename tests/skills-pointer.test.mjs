@@ -48,8 +48,8 @@ test("the plugin adds the model's harness and its pointer, and never another mod
   const dir = await folder({
     "tiel/harness.md": "Tiel rule.\n",
     "tiel/skills/verify/SKILL.md": SKILL("verify", "Run the tests"),
-    "occamy/harness.md": "Occamy rule.\n",
-    "occamy/skills/plan/SKILL.md": SKILL("plan", "Plan the steps"),
+    "sage/harness.md": "Sage rule.\n",
+    "sage/skills/plan/SKILL.md": SKILL("plan", "Plan the steps"),
   })
   const hooks = await plugin.server({}, { harnessDir: dir })
   const hook = hooks["experimental.chat.system.transform"]
@@ -58,10 +58,10 @@ test("the plugin adds the model's harness and its pointer, and never another mod
   assert.equal(tiel.system[0], "Tiel rule.\n")
   assert.match(tiel.system[1], /verify: Run the tests/)
   assert.ok(!tiel.system.join("\n").includes("plan"))
-  const occamy = { system: [] }
-  await hook({ model: { id: "occamy" } }, occamy)
-  assert.equal(occamy.system[0], "Occamy rule.\n")
-  assert.ok(!occamy.system.join("\n").includes("verify"))
+  const sage = { system: [] }
+  await hook({ model: { id: "sage" } }, sage)
+  assert.equal(sage.system[0], "Sage rule.\n")
+  assert.ok(!sage.system.join("\n").includes("verify"))
   await rm(dir, { recursive: true, force: true })
 })
 

@@ -1,4 +1,4 @@
-// ShuraCode plugin: a model's own harness text (config/harness/<tiel|occamy|gemma>/harness.md), chosen by the model id of the request, and
+// ShuraCode plugin: a model's own harness text (config/harness/<tiel|sage|gemma>/harness.md), chosen by the model id of the request, and
 // the pointer to that model's skills (skills/<name>/SKILL.md with its scripts). Each goes into a separate system message, so an edit for
 // one model does not change what another model gets (RSI0c, RSIL0, RSIL0c). Empty files add nothing; with no harnessDir option the
 // plugin does nothing.

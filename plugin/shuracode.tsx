@@ -118,7 +118,7 @@ function readExtras(s: Record<string, any>): Pick<Model, "context" | "switching"
 // SAGECFG1: the short name of the loaded model for the chip ("tiel-coder" -> "Tiel", "sage" -> "Sage"); unknown ids as they are
 export function modelChip(id?: string): string {
   const name = (id ?? "").toLowerCase()
-  for (const [key, label] of [["tiel", "Tiel"], ["sage", "Sage"], ["occamy", "Occamy"], ["gemma", "Gemma"]] as const) {
+  for (const [key, label] of [["tiel", "Tiel"], ["sage", "Sage"], ["gemma", "Gemma"]] as const) {
     if (name.includes(key)) return label
   }
   return id ?? ""
