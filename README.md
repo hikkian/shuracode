@@ -45,6 +45,7 @@ does not fork OpenCode. It adds its own layer through OpenCode's public extensio
 | `plugin/shuracode.tsx` | UI plugin: logo, footer, sidebar, tips, window title, model status |
 | `plugin/server.ts` | server plugin: the agent introduces itself as ShuraCode |
 | `mcp/memory.py` | the memory server (Python standard library only) |
+| `plugin/agent-tools/` | optional agent tools `render` (screenshot + layout problems) and `frames` (video frames + ffprobe): the agent's eyes, off by default |
 | `config/`, `commands/`, `themes/` | model provider, permissions, rules, slash commands, theme |
 
 Because nothing inside the engine is modified, engine updates keep ShuraCode's look, name and features.
@@ -60,6 +61,36 @@ version. `shuracode rollback` returns to the previous one.
 The engine-wide ceiling is not the per-model output limit: each provider entry's `limit.output` can
 still impose a lower limit. The shipped model template currently sets 16,384 for each model. See
 [operations and limits](docs/OPERATIONS.md) before raising it.
+
+
+## Agent tools: `render` and `frames` (the agent's eyes)
+
+An agent that writes a page or cuts a video has no browser and no player: it cannot see what it made. `plugin/agent-tools/agent-tools.ts`
+adds two tools, off by default:
+
+- `render` — an HTML file in the project (or a URL) is opened in headless Chromium at a chosen viewport width (use 390 and 1280). The tool
+  returns a screenshot and a list of layout problems: horizontal overflow, elements outside the viewport, text under 14 px, contrast under
+  4.5:1, tap targets under 44 px, the `h1` count, images without `alt`, console errors, and with `pdf: true` the number of A4 pages.
+- `frames` — a video becomes an ffprobe summary (duration, streams, codecs, size) and 3–6 PNG frames at chosen times.
+
+Enable it in `shuracode.json` with a flag, next to the other plugins:
+
+```json
+"plugin": [
+  "/home/alisher/Projects/shuracode/plugin/server.ts",
+  ["/home/alisher/Projects/shuracode-integration/plugin/agent-tools/agent-tools.ts", { "agentTools": true }]
+]
+```
+
+Options: `agentTools` (both tools), or `render` / `frames` separately; `vision`: `"auto"` (default), `true`, `false`; `python` and
+`browsersPath` (defaults: the shura-qa toolkit's venv and browsers in `~/.local/share/shura-qa`, installed offline); `saveDir`.
+
+How the picture reaches the model: the tool returns the PNG as a tool attachment; the engine passes image attachments to the model as a
+follow-up user message ("Attached media from tool result:") with image parts, which the OpenAI-compatible provider sends as `image_url`
+data URLs — exactly what llama-server with an `mmproj` projector accepts. A model without vision would reject that, so with `vision: "auto"`
+the plugin attaches images only when the session's model declares `"modalities": {"input": ["text", "image"]}` in the config (the shipped
+provider entries do); otherwise the text list of problems alone is returned. Requirements: the shura-qa toolkit (Playwright + Chromium) for
+`render`, `ffmpeg`/`ffprobe` for `frames`; nothing is downloaded at run time. Tests: `node --test tests/agent-tools.test.mjs`.
 
 ## Install
 
