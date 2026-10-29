@@ -115,6 +115,8 @@ export function renderText(file: string, width: number, result: Record<string, a
   if (m.scrollHeight !== undefined) {
     lines.push(`Page: ${m.scrollWidth}×${m.scrollHeight}px, ${m.h1} h1, ${m.h2} h2, ${m.buttons} button(s), ${m.links} link(s), ${m.images} image(s)` +
       (m.minFont ? `, smallest text ${Math.round(m.minFont * 10) / 10}px` : "") + (m.minContrast ? `, lowest contrast ${m.minContrast}:1` : "") + ".")
+    // the graders measure every clickable element by its label: show their sizes so that a 30px link is not a surprise (AGTOOLS1b)
+    if (Array.isArray(m.controls) && m.controls.length) lines.push(`Clickable: ${m.controls.join("; ")}`)
   }
   if (result.pdf_pages !== undefined) lines.push(`A4 with 12 mm margins: ${result.pdf_pages} page(s).`)
   if (saved) lines.push(`Screenshot: ${saved}${result.screenshot_note ? ` (${result.screenshot_note})` : ""}${attached ? " — attached for you to look at" : " — not attached (this model has no image input); read the list above"}`)

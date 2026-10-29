@@ -70,7 +70,9 @@ adds two tools, off by default:
 
 - `render` — an HTML file in the project (or a URL) is opened in headless Chromium at a chosen viewport width (use 390 and 1280). The tool
   returns a screenshot and a list of layout problems: horizontal overflow, elements outside the viewport, text under 14 px, contrast under
-  4.5:1, tap targets under 44 px, the `h1` count, images without `alt`, console errors, and with `pdf: true` the number of A4 pages.
+  4.5:1, tap targets under 44 px, invisible or missing controls, the `h1` count, images without `alt`, console errors, and with `pdf: true`
+  the number of A4 pages. It also lists every visible button and link with its size: the task graders of `bench/agentic-eval` measure a call
+  to action by its label, whatever its markup (`<a>`, `<button>`, `role=button`), and so does the tool.
 - `frames` — a video becomes an ffprobe summary (duration, streams, codecs, size) and 3–6 PNG frames at chosen times.
 
 Enable it in `shuracode.json` with a flag, next to the other plugins:

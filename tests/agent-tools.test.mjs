@@ -101,3 +101,30 @@ test("frames executes ffmpeg and returns frames with an ffprobe summary", async 
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test("render judges controls the way the task graders do: a link styled as a button counts, a short or invisible one is flagged (AGTOOLS1b)", { skip: !havePlaywright }, async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "agent-tools-"))
+  try {
+    const page = (cta) => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>c</title>
+<style>body{margin:0;font-family:sans-serif;color:#111}article{max-width:360px;padding:16px}h1{font-size:24px}p{font-size:16px}</style></head>
+<body><article class="card"><h1>shura.cpp</h1><p>A fork with a VRAM governor.</p>${cta}</article></body></html>`
+    const hooks = await agentTools.server({ client: fakeClient(), directory: dir }, { render: true, vision: false, saveDir: dir })
+    const ctx = { sessionID: "s1", directory: dir, worktree: dir, agent: "build", messageID: "m1", abort: new AbortController().signal, metadata() {}, ask: async () => {} }
+    // the live model's shape: <a class="actions"> with 12px padding = 49px tall — fine, and listed with its size
+    await writeFile(path.join(dir, "index.html"), page('<a class="actions" href="#" style="display:block;padding:14px 16px;line-height:1.3;background:#1b5fb0;color:#fff;font-size:16px">View on GitHub</a>'))
+    let res = await hooks.tool.render.execute({ file: "index.html", width: 390 }, ctx)
+    assert.match(res.output, /no layout problems found/)
+    assert.match(res.output, /Clickable: a\.actions "View on GitHub": \d+×(4[4-9]|5\d)px/)
+    // a 30px link is a small tap target
+    await writeFile(path.join(dir, "index.html"), page('<a href="#" style="display:block;padding:4px;font-size:16px;color:#1b5fb0">View on GitHub</a>'))
+    res = await hooks.tool.render.execute({ file: "index.html", width: 390 }, ctx)
+    assert.match(res.output, /small tap target: a "View on GitHub" is \d+px tall/)
+    // a hidden button is reported as invisible, and a page with no control at all says so
+    await writeFile(path.join(dir, "index.html"), page('<button style="display:none">View on GitHub</button>'))
+    res = await hooks.tool.render.execute({ file: "index.html", width: 390 }, ctx)
+    assert.match(res.output, /invisible control/)
+    assert.match(res.output, /no visible button or link at all/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

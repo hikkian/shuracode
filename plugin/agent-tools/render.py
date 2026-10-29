@@ -34,15 +34,21 @@ JS = r'''(args) => {
     if (fg && fg.a > 0.5) { const l1 = lum(fg.r,fg.g,fg.b), l2 = lum(bg.r,bg.g,bg.b); const c = (Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05);
       if (c < minContrast) { minContrast = c; worst = label(el); } }
   }
-  const small = [];
+  const small = [], controls = [];
   for (const el of document.querySelectorAll("button,a,input[type=button],input[type=submit],[role=button]")) {
     const r = el.getBoundingClientRect(); if (r.width === 0 || r.height === 0) continue;
+    if (controls.length < 8) controls.push(label(el) + ': ' + Math.round(r.width) + '×' + Math.round(r.height) + 'px');
     if (r.height < 44 && small.length < 5) small.push(label(el) + ' is ' + Math.round(r.height) + 'px tall');
+  }
+  // invisible controls: a button or link with no size (display:none, empty, collapsed) is as bad as a missing one
+  const hidden = [];
+  for (const el of document.querySelectorAll("button,a[href],[role=button]")) {
+    const r = el.getBoundingClientRect(); if (r.width === 0 || r.height === 0) { if (hidden.length < 5) hidden.push(label(el)); }
   }
   const count = s => { try { return document.querySelectorAll(s).length; } catch (e) { return -1; } };
   return {scrollWidth: document.documentElement.scrollWidth, scrollHeight: document.documentElement.scrollHeight, innerWidth: window.innerWidth,
           title: document.title, textNodes, minFont: minFont === 1e9 ? null : minFont, minFontEl, minContrast: minContrast === 1e9 ? null : Math.round(minContrast * 100) / 100, worst,
-          outside, smallControls: small, h1: count('h1'), h2: count('h2'), buttons: count('button, a.button, .button, [role=button]'), links: count('a[href]'),
+          outside, smallControls: small, controls, hiddenControls: hidden, h1: count('h1'), h2: count('h2'), buttons: count('button, a.button, .button, [role=button]'), links: count('a[href]'),
           imgNoAlt: count('img:not([alt])'), images: count('img'), lang: document.documentElement.lang || '', viewportMeta: !!document.querySelector('meta[name=viewport]')};
 }'''
 
@@ -81,6 +87,10 @@ def main():
                 problems.append(f"lowest text contrast {m['minContrast']}:1 at {m['worst']} (WCAG wants >= 4.5:1)")
             for x in m["smallControls"]:
                 problems.append(f"small tap target: {x} (aim for >= 44px)")
+            for x in m["hiddenControls"]:
+                problems.append(f"invisible control (no size on screen): {x}")
+            if not m["controls"]:
+                problems.append("no visible button or link at all: a call to action must be a visible <button>, <a href> or role=button")
             if m["h1"] != 1:
                 problems.append(f"{m['h1']} <h1> elements (a page wants exactly one)")
             if m["imgNoAlt"] > 0:
