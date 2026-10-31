@@ -7,6 +7,7 @@ import completionGate from "../plugin/reliability/completion-gate.ts"
 import softEdit from "../plugin/reliability/soft-edit.ts"
 import loopDetector from "../plugin/reliability/loop-detector.ts"
 import taskCard from "../plugin/reliability/task-card.ts"
+import interruptRetry from "../plugin/reliability/interrupt-retry.ts"
 
 function fakeInput(overrides = {}) {
   const prompts = []
@@ -54,6 +55,7 @@ test("repository config template keeps all reliability flags off by default", as
   assert.equal(defaults["soft-edit.ts"].softEdit, false)
   assert.equal(defaults["loop-detector.ts"].loopDetector, false)
   assert.equal(defaults["task-card.ts"].taskCard, false)
+  assert.equal(defaults["interrupt-retry.ts"].interruptRetry, false)
 })
 
 test("completion gate nudges only edited, unverified work and caps at two", async () => {
@@ -140,4 +142,36 @@ test("task card is reinjected, compaction keeps its template, and large output b
   } finally {
     await rm(root, { recursive: true, force: true })
   }
+})
+
+const interrupted = { event: { type: "session.error", properties: { sessionID: "s1", error: { name: "UnknownError", data: { message: JSON.stringify({ message: "llama-server stopped mid-response; the answer is incomplete.", type: "api_error", code: "SHURA_RESPONSE_INTERRUPTED" }) } } } } }
+
+test("interrupt retry stays off unless its own config flag is true", async () => {
+  const { input, prompts } = fakeInput()
+  const hooks = await interruptRetry.server(input, { interruptRetry: false })
+  await hooks.event(interrupted)
+  assert.equal(prompts.length, 0)
+})
+
+test("interrupt retry asks the model to go on once per user message, and only for the gateway's cut-off code", async () => {
+  const { input, prompts } = fakeInput()
+  const hooks = await interruptRetry.server(input, { interruptRetry: true, interruptRetrySettleMs: 0 })
+  await hooks["chat.message"](...chat("Read the file and explain add"))
+  await hooks.event({ event: { type: "session.error", properties: { sessionID: "s1", error: { name: "UnknownError", data: { message: "Rate limit exceeded" } } } } })
+  assert.equal(prompts.length, 0, "an error without the gateway code is not retried")
+  await hooks.event(interrupted)
+  assert.equal(prompts.length, 0, "the retry waits for the session to go idle")
+  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } })
+  assert.equal(prompts.length, 1)
+  assert.match(prompts[0].body.parts[0].text, /^\[Shura retry\]/)
+  // the retry's own message is not a new user message: a second cut in the same answer is left to the user
+  await hooks["chat.message"](...chat("[Shura retry] The previous answer was cut off by a server failure."))
+  await hooks.event(interrupted)
+  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } })
+  assert.equal(prompts.length, 1)
+  // a new user message gets its own retry
+  await hooks["chat.message"](...chat("Now change the function"))
+  await hooks.event(interrupted)
+  await hooks.event({ event: { type: "session.idle", properties: { sessionID: "s1" } } })
+  assert.equal(prompts.length, 2)
 })

@@ -74,6 +74,7 @@
     ["@REPO_DIR@/plugin/reliability/soft-edit.ts", { "softEdit": false }],
     ["@REPO_DIR@/plugin/reliability/loop-detector.ts", { "loopDetector": false }],
     ["@REPO_DIR@/plugin/reliability/task-card.ts", { "taskCard": false }],
+    ["@REPO_DIR@/plugin/reliability/interrupt-retry.ts", { "interruptRetry": false }],
     ["@REPO_DIR@/plugin/visible-tests.ts", { "visibleTests": false }],
     ["@REPO_DIR@/plugin/model-harness.ts", { "harnessDir": "@REPO_DIR@/config/harness" }],
     ["@REPO_DIR@/plugin/context-diet.ts", { "contextDiet": false }]
