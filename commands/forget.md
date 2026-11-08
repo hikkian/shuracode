@@ -9,5 +9,5 @@ wrong, update it with memory_save instead of deleting it. Tell me in one line wh
 
 memory_delete is a soft deletion: the record leaves the index and the search but stays in the store, and
 `/memory restore <name>` brings it back. With `--purge` the record is removed for good: run
-`shura memory forget <name> --purge` in the terminal (the store writes the record to an export file first) and
-tell me where that file is.
+`shura memory forget <name> --purge` in the terminal (the store first appends the record to purged.jsonl next
+to the database and prints that path) and tell me where that file is.

@@ -6,6 +6,7 @@ module is not checked out next to this repository (SHURA_LIFELONG_STORE points a
 import importlib.util
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -131,11 +132,44 @@ class SqlStoreTest(unittest.TestCase):
         self.assertIn("prefers-pytest", index)
         self.assertIn("passport: (procedure, you, ", self.store.read("prefers-pytest"))
 
-    def test_same_name_updates_and_the_old_text_is_reported(self):
+    def test_same_name_with_new_text_makes_a_version_and_the_old_text_is_kept_in_history(self):
         self.store.save("editor", "uses vim", "user", "vim")
         msg = self.store.save("editor", "uses VS Code", "user", "VS Code with the Shura theme")
-        self.assertIn("Updated memory 'editor' (it said: uses vim)", msg)
+        self.assertIn("Updated memory 'editor' (it said: uses vim", msg)
         self.assertNotIn("uses vim", (self.root / "MEMORY.md").read_text())
+        self.assertIn("VS Code with the Shura theme", self.store.read("editor"))
+        history = [r for r in self.store.store.list_all(include_deleted=True) if r["key"].startswith("editor~v")]
+        self.assertEqual([r["body"] for r in history], ["vim"], "the old text is a superseded version, not gone")
+        self.assertIsNotNone(self.store.store.read("editor")["passport"]["supersedes"])
+        msg = self.store.save("editor", "uses VS Code", "user", "VS Code with the Shura theme")
+        self.assertIn("Confirmed memory 'editor' again", msg)
+
+    def test_save_delete_save_with_the_same_name_works(self):
+        self.store.save("k", "first", "user", "one")
+        self.store.delete("k")
+        msg = self.store.save("k", "second", "user", "two")
+        self.assertIn("Saved memory 'k'", msg)
+        self.assertIn("two", self.store.read("k"))
+
+    def test_a_database_error_is_a_tool_error_not_a_dead_server(self):
+        class Broken:
+            def save(self, **kw):
+                raise sqlite3.OperationalError("database is locked")
+            read = search = delete = save
+        reply = M.handle(Broken(), {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "save", "arguments": {}}})
+        self.assertTrue(reply["result"]["isError"])
+        self.assertIn("locked", reply["result"]["content"][0]["text"])
+
+    def test_a_broken_store_module_falls_back_to_the_legacy_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "lifelong_store.py"
+            bad.write_text("this is not python (\n")
+            replies = run_server(tmp, [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+                                       {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "save", "arguments": {
+                                           "name": "x", "description": "d", "type": "user", "content": "c"}}}],
+                                 SHURA_LIFELONG_STORE=str(bad), SHURACODE_MEMORY_LEGACY="")
+            self.assertFalse(replies[2]["result"]["isError"])
+            self.assertTrue((Path(tmp) / "x.md").exists(), "the legacy file store answered")
 
     def test_delete_is_soft_and_the_record_leaves_the_index_and_the_search(self):
         self.store.save("deploy-steps", "how to deploy", "project", "make deploy")

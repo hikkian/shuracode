@@ -14,6 +14,7 @@ import importlib.util
 import json
 import os
 import re
+import sqlite3
 import sys
 import tempfile
 from datetime import date
@@ -292,10 +293,20 @@ class SqlStore:
             raise MemoryError(f"type must be one of {', '.join(TYPES)}")
         if len(" ".join(description.split())) > MAX_DESCRIPTION:
             raise MemoryError(f"description is {len(description)} characters; keep it under {MAX_DESCRIPTION}")
-        out = self._wrap(self.store.save, name, description, content, kind=KIND_OF_LEGACY_TYPE[type], tags=[f"legacy-{type}"])
+        kind, tags = KIND_OF_LEGACY_TYPE[type], [f"legacy-{type}"]
+        try:
+            key = self.L.slug(name)
+        except self.L.StoreError as e:
+            raise MemoryError(str(e))
+        existing = self.store.get(key)
+        if existing is not None and (existing["body"] != content.strip() or existing["title"] != " ".join(description.split())):
+            # a correction: the old text stays in history as a superseded version (/fix), the key now reads the new text
+            rec = self._wrap(self.store.fix, key, title=description, body=content, kind=kind)
+            return f"Updated memory '{rec['key']}' (it said: {existing['title']}; the old version is kept in history). Passport: {rec['passport_line']}."
+        out = self._wrap(self.store.save, key, description, content, kind=kind, tags=tags)
         rec = out["record"]
         if out["updated"]:
-            return f"Updated memory '{rec['key']}' (it said: {out['old_title']}). Passport: {rec['passport_line']}."
+            return f"Confirmed memory '{rec['key']}' again (same text). Passport: {rec['passport_line']}."
         msg = f"Saved memory '{rec['key']}'. Passport: {rec['passport_line']}."
         if out["similar"]:
             msg += (f" Similar memories exist: {', '.join(out['similar'])}. If one covers the same topic, merge this "
@@ -334,8 +345,14 @@ class SqlStore:
 
 
 def make_store():
-    mod = load_store_module()
-    if mod is None or os.environ.get("SHURACODE_MEMORY_LEGACY") == "1":
+    if os.environ.get("SHURACODE_MEMORY_LEGACY") == "1":
+        return Store()
+    try:
+        mod = load_store_module()
+    except Exception as e:   # a broken module file must not take the server down either
+        print(f"[shuracode-memory] knowledge store module unusable ({e}); using the legacy files", file=sys.stderr)
+        return Store()
+    if mod is None:
         return Store()
     try:
         return SqlStore(mod)
@@ -370,7 +387,7 @@ def handle(store, msg):
             text, error = f"unknown tool: {tool}", True
         except TypeError as e:
             text, error = f"bad arguments for {tool}: {e}", True
-        except (MemoryError, OSError) as e:
+        except (MemoryError, OSError, sqlite3.Error) as e:
             text, error = str(e), True
         return {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": error}}
     return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": f"method not found: {method}"}}
