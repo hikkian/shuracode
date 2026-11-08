@@ -77,7 +77,8 @@
     ["@REPO_DIR@/plugin/reliability/interrupt-retry.ts", { "interruptRetry": false }],
     ["@REPO_DIR@/plugin/visible-tests.ts", { "visibleTests": false }],
     ["@REPO_DIR@/plugin/model-harness.ts", { "harnessDir": "@REPO_DIR@/config/harness", "userHarnessDir": "~/.local/share/shura/skills" }],
-    ["@REPO_DIR@/plugin/context-diet.ts", { "contextDiet": false }]
+    ["@REPO_DIR@/plugin/context-diet.ts", { "contextDiet": false }],
+    ["@REPO_DIR@/plugin/lifelong-capture.ts", { "lifelongCapture": false }]
   ],
   "instructions": ["~/.config/shuracode/AGENTS.md", "~/.local/share/shuracode/memory/MEMORY.md"],
   "agent": {

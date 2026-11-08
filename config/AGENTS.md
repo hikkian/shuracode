@@ -62,3 +62,9 @@ normally after the night check against their own tasks. Tools: rule_case, rule_p
 - The layer holds at most 12 rules and about 600 tokens. When rule_list shows it is full or two rules overlap, propose one
   merged rule (rule_merge) instead of a new one; it goes through the night check like any candidate. A "Notice:" line in
   rule_list means a rule passed the check: tell the person once, they enable it in the terminal.
+
+# Saving a task or an example (only the person's command)
+
+/task-save keeps the task we just solved as a control task, /example keeps this run (or "/example correction <fixed text>") as a training
+example. Both are the person's commands: call capture_task or capture_example only when the command asks you to, once, and never to save
+something on your own. Everything is stored on this machine only. Do not ask whether to save: the person is asked once, outside the chat.

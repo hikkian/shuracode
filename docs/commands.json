@@ -90,6 +90,16 @@
    ]
   },
   {
+   "id": "example",
+   "name": "/example",
+   "category": "Memory",
+   "en": "Keep this run, or a correction, as an example for later training (stored only on this machine)",
+   "ru": "Оставить этот прогон или исправление как пример для будущего обучения (хранится только на этом компьютере).",
+   "source": "shuracode",
+   "example": "/example correction <как надо было>",
+   "kk": "(translation pending)"
+  },
+  {
    "id": "fix",
    "name": "/fix",
    "category": "Memory",
@@ -142,6 +152,16 @@
    "en": "Show the rules of the personal layer and their status",
    "ru": "Показать правила личного слоя и их статус.",
    "source": "shuracode",
+   "kk": "(translation pending)"
+  },
+  {
+   "id": "task-save",
+   "name": "/task-save",
+   "category": "Memory",
+   "en": "Save the task we just solved as a control task for checking Shura (stored only on this machine)",
+   "ru": "Сохранить только что решённую задачу как контрольную для проверки Shura (хранится только на этом компьютере).",
+   "source": "shuracode",
+   "example": "/task-save",
    "kk": "(translation pending)"
   },
   {
