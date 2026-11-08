@@ -90,21 +90,30 @@
    ]
   },
   {
+   "id": "fix",
+   "name": "/fix",
+   "category": "Memory",
+   "en": "Correct something Shura remembers (keeps the old version in history)",
+   "ru": "Исправить то, что помнит Shura (старая версия остаётся в истории).",
+   "kk": "Shura есінде сақтағанын түзету (ескі нұсқа тарихта қалады).",
+   "source": "shuracode"
+  },
+  {
    "id": "forget",
    "name": "/forget",
    "category": "Memory",
    "en": "Remove something from Shura's memory",
-   "ru": "Удалить запись из памяти.",
-   "kk": "Жадтан жазбаны өшіру.",
+   "ru": "Убрать что-то из памяти Shura (мягко; --purge удаляет насовсем после экспорта).",
+   "kk": "Shura жадынан бір нәрсені алып тастау (жұмсақ; --purge экспорттан кейін біржола өшіреді).",
    "source": "shuracode"
   },
   {
    "id": "memory",
    "name": "/memory",
    "category": "Memory",
-   "en": "Show what Shura remembers",
-   "ru": "Показать, что ShuraCode помнит о тебе и твоих проектах.",
-   "kk": "ShuraCode сен және жобаларың туралы нені есте сақтағанын көрсету.",
+   "en": "Show what Shura remembers, or export/import/stats/restore the memory",
+   "ru": "Показать, что помнит Shura; подкоманды export, import, stats, restore.",
+   "kk": "Shura нені есінде сақтайтынын көрсету; export, import, stats, restore ішкі командалары.",
    "source": "shuracode"
   },
   {

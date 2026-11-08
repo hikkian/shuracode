@@ -12,12 +12,21 @@
    "example": "/remember I prefer small, focused commits"
   },
   {
+   "id": "fix",
+   "name": "/fix",
+   "category": "Memory",
+   "en": "Correct something Shura remembers (keeps the old version in history)",
+   "ru": "Исправить то, что помнит Shura (старая версия остаётся в истории).",
+   "kk": "Shura есінде сақтағанын түзету (ескі нұсқа тарихта қалады).",
+   "source": "shuracode"
+  },
+  {
    "id": "forget",
    "name": "/forget",
    "category": "Memory",
    "en": "Remove a memory.",
-   "ru": "Удалить запись из памяти.",
-   "kk": "Жадтан жазбаны өшіру.",
+   "ru": "Убрать что-то из памяти Shura (мягко; --purge удаляет насовсем после экспорта).",
+   "kk": "Shura жадынан бір нәрсені алып тастау (жұмсақ; --purge экспорттан кейін біржола өшіреді).",
    "source": "shuracode"
   },
   {
@@ -25,8 +34,8 @@
    "name": "/memory",
    "category": "Memory",
    "en": "Show what ShuraCode remembers about you and your projects.",
-   "ru": "Показать, что ShuraCode помнит о тебе и твоих проектах.",
-   "kk": "ShuraCode сен және жобаларың туралы нені есте сақтағанын көрсету.",
+   "ru": "Показать, что помнит Shura; подкоманды export, import, stats, restore.",
+   "kk": "Shura нені есінде сақтайтынын көрсету; export, import, stats, restore ішкі командалары.",
    "source": "shuracode"
   },
   {
