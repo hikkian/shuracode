@@ -43,7 +43,7 @@ def build():
             item["en"] = desc                         # the command file is the source of the English text
     items = list(by_id.values())
     for i in items:
-        if i.get("kk_pending") is True and not str(i.get("kk", "")).strip():
+        if i.pop("kk_pending", None) is True and not str(i.get("kk", "")).strip():
             i["kk"] = KK_PENDING          # a translation a native reader has not reviewed yet is not shown as Kazakh
         for lang in LANGS:
             if not str(i.get(lang, "")).strip():

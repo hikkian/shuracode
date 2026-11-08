@@ -1,6 +1,6 @@
 // The per-model harness (RSI): which harness folder a model id uses, and the pointer to its skills. Standard library only, so it can be
 // tested on its own.
-import { readdir, readFile } from "node:fs/promises"
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
@@ -75,5 +75,20 @@ export async function personalLayerDir(modelDir: string): Promise<string> {
     return versioned
   } catch {
     return modelDir
+  }
+}
+
+// <userHarnessDir>/CURRENT_MODEL holds the model key of the running session, so the rules server (mcp/rules.py) files a rule under
+// the model that is actually answering. Written only when it changes (one tiny file, no write per request); errors are ignored.
+export async function rememberCurrentModel(userDir: string, key: string): Promise<void> {
+  const file = path.join(userDir, "CURRENT_MODEL")
+  try {
+    if ((await readFile(file, "utf8").catch(() => "")).trim() === key) return
+    await mkdir(userDir, { recursive: true, mode: 0o700 })
+    const tmp = `${file}.${process.pid}.tmp`
+    await writeFile(tmp, key + "\n", { mode: 0o600 })
+    await rename(tmp, file)
+  } catch {
+    /* the layer is optional: a read-only home must not break the request */
   }
 }

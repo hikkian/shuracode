@@ -35,13 +35,34 @@ DB_PATH = Path(os.environ.get("SHURA_LIFELONG_DB") or (MEMORY_DIR / "lifelong.sq
                                                       else Path.home() / ".local/share/shura/lifelong.sqlite"))
 SKILLS_DIR = Path(os.environ.get("SHURA_SKILLS_DIR") or Path.home() / ".local/share/shura/skills")
 MODELS = ("tiel", "sage", "gemma")
-DEFAULT_MODEL = os.environ.get("SHURACODE_MODEL") or "tiel"
+CURRENT_MODEL_FILE = "CURRENT_MODEL"      # written by plugin/model-harness.ts on every request: the model key of the running session
 STATUSES = ("candidate", "queued", "testing", "passed", "enabled", "rejected", "retired")
 KINDS = ("rule", "procedure")
 MAX_WHEN_WORDS, MAX_DO_WORDS, MAX_RULE_WORDS = 25, 40, 60
 MAX_WHY_CHARS = 200
 MAX_ENABLED = 12            # §4.7: always-on rules per model (the token budget is checked by the gate, LL4b/LL5)
-CONTROL_RE = re.compile(r"(?i)<\|[^<>\n]{1,60}>|<(start|end)_of_turn>|</?tool_call>|</?think>|\[/?INST\]")
+# the same escaping as Shura's knowledge store (gateway/lifelong_store.py): template markers never reach a prompt raw
+CONTROL_TOKENS = ["<|im_start|>", "<|im_end|>", "<|endoftext|>", "<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>",
+                  "<start_of_turn>", "<end_of_turn>", "<tool_call>", "</tool_call>", "<tool_response>", "</tool_response>",
+                  "<think>", "</think>", "<function=", "</function>", "<parameter=", "</parameter>", "[INST]", "[/INST]", "<<SYS>>", "<</SYS>>",
+                  "<bos>", "<eos>", "<start_of_image>", "<end_of_image>", "<start_of_audio>", "<end_of_audio>"]
+CONTROL_RE = re.compile(r"(?i)<\|[^<>\n]{1,60}>")
+INVISIBLE_RE = re.compile("[\u200b\u2060\ufeff\u00ad]")
+INSTRUCTION_RE = re.compile(r"(?i)(ignore (all |the )?(previous|prior|above) (instructions|messages|rules)|disregard (the )?(previous|above)|"
+                            r"you are now |from now on you (are|will|must)|^\s*system\s*:|теперь ты |забудь (все|всё|предыдущие) инструкци|"
+                            r"игнорируй (предыдущие|все) (инструкции|указания)|act as (the )?system|new instructions:|curl [^ ]+ *\| *sh)")
+
+
+def escape_control(text):
+    out = INVISIBLE_RE.sub("", str(text))
+    for tok in CONTROL_TOKENS:
+        if tok.lower() in out.lower():
+            out = re.sub(re.escape(tok), lambda m: m.group(0).replace("<", "〈").replace(">", "〉").replace("[", "［").replace("]", "］"), out, flags=re.I)
+    return CONTROL_RE.sub(lambda m: m.group(0).replace("<", "〈").replace(">", "〉"), out)
+
+
+def looks_like_instruction(text):
+    return bool(INSTRUCTION_RE.search(text or ""))
 
 # the server process is one ShuraCode session: two cases from different processes are independent situations (§2.3 p. 3)
 SESSION = os.environ.get("SHURACODE_SESSION") or f"{socket.gethostname()}:{os.getpid()}:{int(time.time())}"
@@ -85,8 +106,11 @@ TOOLS = [
      "description": "Show one rule in full: its RULE form, cases, status history.",
      "inputSchema": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]}},
     {"name": "rule_withdraw",
-     "description": "The person declined this rule ('no, don't'): mark it rejected so it is not proposed again.",
-     "inputSchema": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]}},
+     "description": "The person declined this rule ('no, don't'): mark it rejected so it is not proposed again. For a proposal that was "
+                    "never recorded, pass when/do/why too so the refusal is remembered.",
+     "inputSchema": {"type": "object", "properties": {"key": {"type": "string"}, "when": {"type": "string"}, "do": {"type": "string"},
+                                                      "why": {"type": "string"}, "model": {"type": "string", "enum": list(MODELS)}},
+                     "required": ["key"]}},
 ]
 
 
@@ -119,10 +143,11 @@ def clean(text, label, max_words=None, max_chars=None):
         raise RuleError(f"{label} is {words(text)} words; keep it under {max_words} (a rule is one short paragraph)")
     if max_chars and len(text) > max_chars:
         raise RuleError(f"{label} is {len(text)} characters; keep it under {max_chars}")
+    text = INVISIBLE_RE.sub("", text)
     for pattern, what in SECRET_PATTERNS:
         if re.search(pattern, text):
             raise RuleError(f"refused: {label} looks like it contains {what}; a rule never holds credentials")
-    return CONTROL_RE.sub(lambda m: m.group(0).replace("<", "〈").replace(">", "〉").replace("[", "［").replace("]", "］"), text)
+    return escape_control(text)
 
 
 def rule_text(when, do):
@@ -134,8 +159,9 @@ def rule_text(when, do):
 
 def rule_form(r):
     n = r["notes"]
+    flag = "\nflag: instruction-like (reads like an instruction to the model; the person must look at it)" if n.get("flagged") else ""
     return (f"RULE {n['key']} [{r['status']}]\nwhen: {n['when']}\ndo: {n['do']}\nwhy: {n['why']}\nborn_from: {r['born_from']}\n"
-            f"cost: {n['cost_words']} words\nmodel: {n['model']}, kind: {r['kind']}, cases: {len(r['cases'])}")
+            f"cost: {n['cost_words']} words\nmodel: {n['model']}, kind: {r['kind']}, cases: {len(r['cases'])}{flag}")
 
 
 class Rules:
@@ -149,9 +175,12 @@ class Rules:
                 os.chmod(self.path.parent, 0o700)
             except OSError:
                 pass
+        fresh = not self.path.exists() or self.path.stat().st_size == 0
         self.db = sqlite3.connect(str(self.path), isolation_level=None, check_same_thread=False, timeout=10)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA busy_timeout=10000")
+        if fresh:
+            self.db.execute("PRAGMA page_size=1024")          # the same file layout as Shura's store: fewer bytes per write on the SSD
         for attempt in range(5):
             try:
                 self.db.execute("PRAGMA journal_mode=WAL")
@@ -160,6 +189,8 @@ class Rules:
                 if attempt == 4:
                     raise
                 time.sleep(0.05 * (attempt + 1))
+        self.db.execute("PRAGMA synchronous=NORMAL")
+        self.db.execute("PRAGMA secure_delete=ON")
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.executescript(SCHEMA)
         try:
@@ -186,9 +217,26 @@ class Rules:
             out.append(d)
         return out
 
-    def _get(self, key):
+    def current_model(self):
+        """The model of the running session: written by plugin/model-harness.ts into <skills_dir>/CURRENT_MODEL on every request;
+        SHURACODE_MODEL for tests; tiel when nothing says otherwise."""
+        try:
+            name = (self.skills_dir / CURRENT_MODEL_FILE).read_text(encoding="utf-8").strip().lower()
+        except OSError:
+            name = ""
+        name = name or (os.environ.get("SHURACODE_MODEL") or "").lower() or "tiel"
+        return name if name in MODELS else "tiel"
+
+    def _model(self, model):
+        model = (model or self.current_model()).lower()
+        if model not in MODELS:
+            raise RuleError(f"model must be one of {', '.join(MODELS)}")
+        return model
+
+    def _get(self, key, model):
+        """A rule is one per (key, model): a case for Tiel and a case for Sage are two rules, not two cases of one."""
         for r in self._rows():
-            if r["notes"]["key"] == key:
+            if r["notes"]["key"] == key and r["notes"]["model"] == model:
                 return r
         return None
 
@@ -197,14 +245,14 @@ class Rules:
         when = clean(when, "when", max_words=MAX_WHEN_WORDS)
         do = clean(do, "do", max_words=MAX_DO_WORDS)
         why = clean(why, "why", max_chars=MAX_WHY_CHARS)
-        model = model or DEFAULT_MODEL
-        if model not in MODELS:
-            raise RuleError(f"model must be one of {', '.join(MODELS)}")
+        model = self._model(model)
         kind = kind or "rule"
         if kind not in KINDS:
             raise RuleError(f"kind must be one of {', '.join(KINDS)}")
         text = rule_text(when, do)
         notes = {"key": key, "model": model, "when": when, "do": do, "why": why, "cost_words": words(text)}
+        if looks_like_instruction(f"{when}\n{do}\n{why}"):
+            notes["flagged"] = "instruction-like"
         return key, text, notes, model, kind
 
     def _insert(self, text, kind, status, born_from, notes):
@@ -221,7 +269,7 @@ class Rules:
         refreshes the text. A rule the person declined is not proposed again."""
         key, text, notes, model, kind = self._validate(key, when, do, why, model, kind)
         with Tx(self.db):
-            r = self._get(key)
+            r = self._get(key, model)
             if r is None:
                 rid = self._insert(text, kind, "candidate", f"signal:{self.session}", notes)
                 self._add_case(rid, why)
@@ -252,14 +300,17 @@ class Rules:
         """An explicit /rule: queued at once."""
         key, text, notes, model, kind = self._validate(key, when, do, why, model, kind)
         with Tx(self.db):
-            r = self._get(key)
+            r = self._get(key, model)
             if r is None:
                 rid = self._insert(text, kind, "queued", "user_command", notes)
                 self._add_case(rid, why)
                 self._journal(actor, "rule_queued", f"{key} by /rule")
                 return f"Rule '{key}' is queued for the night check (cost {notes['cost_words']} words). Nothing changes in the prompt until it passes and the person enables it."
             if r["status"] in ("enabled", "passed", "testing"):
-                return f"Rule '{key}' is already {r['status']}."
+                return f"Rule '{key}' is already {r['status']}; its text is not changed (/rule a new key for a different rule)."
+            if r["status"] == "queued" and r["text"] != text:
+                # the person already saw the queued text: a new text under the same key becomes a new queued text only with history
+                self._journal(actor, "rule_text_changed", f"{key} from: {r['text']}")
             r["notes"].update(notes)
             r["notes"].pop("declined", None)
             self.db.execute("UPDATE rule SET text=?, kind=?, status='queued', born_from='user_command', notes=? WHERE id=?",
@@ -268,14 +319,28 @@ class Rules:
             self._journal(actor, "rule_queued", f"{key} by /rule (was {r['status']})")
             return f"Rule '{key}' is queued for the night check (it was {r['status']}; cost {notes['cost_words']} words)."
 
-    def withdraw(self, key, actor="user"):
+    def withdraw(self, key, when=None, do=None, why=None, model=None, actor="user"):
+        """The person said no. A proposal that was never recorded is recorded as rejected (with its text when given), so the same
+        key is not proposed again. The model (actor shura) may withdraw only candidates and queued rules it could have created."""
         key = slug(key)
+        model = self._model(model)
         with Tx(self.db):
-            r = self._get(key)
+            r = self._get(key, model)
             if r is None:
-                raise RuleError(f"no rule '{key}'")
+                if when and do:
+                    key, text, notes, model, kind = self._validate(key, when, do, why or "declined by the person", model, None)
+                else:
+                    text, kind, notes = f"(declined before it was written: {key})", "rule", {"key": key, "model": model, "when": when or "", "do": do or "",
+                                                                                               "why": why or "declined by the person", "cost_words": 0}
+                notes["declined"] = True
+                rid = self._insert(text, kind, "rejected", "declined", notes)
+                self.db.execute("UPDATE rule SET retired_at=? WHERE id=?", (now_iso(), rid))
+                self._journal(actor, "rule_declined", key)
+                return f"Rule '{key}' is recorded as declined by the person; it will not be proposed again."
             if r["status"] == "enabled":
-                raise RuleError(f"rule '{key}' is enabled; disable it in the terminal (shuracode-rules disable {key}) instead of withdrawing")
+                raise RuleError(f"rule '{key}' is enabled; only the person can retire it in the terminal")
+            if actor != "user" and r["status"] not in ("candidate", "queued", "rejected"):
+                raise RuleError(f"rule '{key}' is {r['status']}; only the person can withdraw it")
             r["notes"]["declined"] = True
             self.db.execute("UPDATE rule SET status='rejected', retired_at=?, notes=? WHERE id=?", (now_iso(), json.dumps(r["notes"], ensure_ascii=False), r["id"]))
             self._journal(actor, "rule_declined", key)
@@ -294,38 +359,45 @@ class Rules:
         lines = []
         for r in rows:
             n = r["notes"]
-            lines.append(f"- {n['key']} [{r['status']}] ({n['model']}, {len(r['cases'])} case{'s' if len(r['cases']) != 1 else ''}, {n['cost_words']} words): {r['text']}")
+            flag = " !instruction-like" if n.get("flagged") else ""
+            lines.append(f"- {n['key']} [{r['status']}]{flag} ({n['model']}, {len(r['cases'])} case{'s' if len(r['cases']) != 1 else ''}, {n['cost_words']} words): {r['text']}")
         return "\n".join(lines)
 
-    def show(self, key):
-        r = self._get(slug(key))
+    def show(self, key, model=None):
+        r = self._get(slug(key), self._model(model))
         if r is None:
-            raise RuleError(f"no rule '{slug(key)}'")
+            raise RuleError(f"no rule '{slug(key)}' for {self._model(model)}")
         cases = "\n".join(f"  - {c['ts'][:10]} session {c['session'][:24]}: {c['why']}" for c in r["cases"]) or "  (none)"
         events = "\n".join(f"  - {j['ts'][:19]} {j['actor']}: {j['event']}" for j in
-                           self.db.execute("SELECT * FROM journal WHERE ref LIKE ? ORDER BY id", (r["notes"]["key"] + "%",)))
+                           self.db.execute("SELECT * FROM journal WHERE ref = ? OR ref LIKE ? ORDER BY id", (r["notes"]["key"], r["notes"]["key"] + " %")))
         return f"{rule_form(r)}\ncases:\n{cases}\nhistory:\n{events}"
 
     # ---- the personal layer (rendered from enabled rules) -------------------------------------------------------------------
-    def set_status(self, key, status, actor="user"):
-        """Terminal-only (the model has no tool for it): enable or retire a rule by the person's word; renders the layer."""
+    def set_status(self, key, status, model=None, actor="user", force=False):
+        """Terminal-only (the model has no tool for it): enable or retire a rule by the person's word; renders the layer. Enabling
+        takes a queued or passed rule (anything else, and a rule flagged instruction-like, only with force) and returns its text."""
         key = slug(key)
+        model = self._model(model)
         if status not in ("enabled", "retired"):
             raise RuleError("status must be enabled or retired")
         with Tx(self.db):
-            r = self._get(key)
+            r = self._get(key, model)
             if r is None:
-                raise RuleError(f"no rule '{key}'")
+                raise RuleError(f"no rule '{key}' for {model}")
             if status == "enabled":
-                enabled = [x for x in self._rows("status='enabled'") if x["notes"]["model"] == r["notes"]["model"]]
+                if r["status"] not in ("queued", "passed") and not force:
+                    raise RuleError(f"rule '{key}' is {r['status']}, not queued or passed; --force enables it anyway")
+                if r["notes"].get("flagged") and not force:
+                    raise RuleError(f"rule '{key}' reads like an instruction to the model (flagged); read it and use --force if it is really yours")
+                enabled = [x for x in self._rows("status='enabled'") if x["notes"]["model"] == model]
                 if len(enabled) >= MAX_ENABLED and r["status"] != "enabled":
-                    raise RuleError(f"{MAX_ENABLED} rules are already enabled for {r['notes']['model']}; retire or merge one first (§4.7)")
+                    raise RuleError(f"{MAX_ENABLED} rules are already enabled for {model}; retire or merge one first (§4.7)")
                 self.db.execute("UPDATE rule SET status='enabled', enabled_at=?, retired_at=NULL WHERE id=?", (now_iso(), r["id"]))
             else:
                 self.db.execute("UPDATE rule SET status='retired', retired_at=? WHERE id=?", (now_iso(), r["id"]))
             self._journal(actor, f"rule_{status}", key)
-        self.render(r["notes"]["model"])
-        return f"Rule '{key}' is {status}; the personal layer of {r['notes']['model']} is rendered."
+        self.render(model)
+        return f"Rule '{key}' is {status}; the personal layer of {model} is rendered.\n{r['text']}"
 
     def render_text(self, model):
         rows = sorted((r for r in self._rows("status='enabled'") if r["notes"]["model"] == model), key=lambda r: r["enabled_at"] or "")
@@ -337,6 +409,7 @@ class Rules:
 
     def render(self, model):
         """Write <skills_dir>/<model>/harness.md (only when it changed) and make sure skills/ exists."""
+        model = self._model(model)
         folder = self.skills_dir / model
         (folder / "skills").mkdir(parents=True, exist_ok=True)
         text = self.render_text(model)
@@ -393,12 +466,18 @@ def handle(rules, msg):
     if method == "tools/call":
         params = msg.get("params", {})
         tool, args = params.get("name"), params.get("arguments") or {}
+        fns = {"rule_case": rules.case, "rule_propose": rules.propose, "rule_list": rules.list, "rule_show": rules.show, "rule_withdraw": rules.withdraw}
+        schema = next((t for t in TOOLS if t["name"] == tool), None)
+        if schema is None or tool not in fns:
+            return {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": f"unknown tool: {tool}"}], "isError": True}}
         try:
-            fn = {"rule_case": rules.case, "rule_propose": rules.propose, "rule_list": rules.list, "rule_show": rules.show,
-                  "rule_withdraw": rules.withdraw}[tool]
-            text, error = fn(**args), False
-        except KeyError:
-            text, error = f"unknown tool: {tool}", True
+            if not isinstance(args, dict):
+                raise TypeError("arguments must be an object")
+            allowed = schema["inputSchema"]["properties"]
+            args = {k: v for k, v in args.items() if k in allowed}    # the model cannot pass actor or anything outside the schema
+            if tool in ("rule_case", "rule_propose", "rule_withdraw"):
+                args["actor"] = "shura"                                 # the journal says who really called: the model, not the person
+            text, error = fns[tool](**args), False
         except TypeError as e:
             text, error = f"bad arguments for {tool}: {e}", True
         except (RuleError, MemoryError, OSError, sqlite3.Error, ValueError, AttributeError) as e:
@@ -437,11 +516,13 @@ def main(argv=None):
     ap.add_argument("--skills-dir", default=str(SKILLS_DIR))
     sub = ap.add_subparsers(dest="cmd")
     s = sub.add_parser("list"); s.add_argument("--status"); s.add_argument("--model")
-    s = sub.add_parser("show"); s.add_argument("key")
-    s = sub.add_parser("enable", help="by the person's word: puts the rule into the personal layer (the gate is LL5)"); s.add_argument("key")
-    s = sub.add_parser("disable"); s.add_argument("key")
-    s = sub.add_parser("withdraw"); s.add_argument("key")
-    s = sub.add_parser("render"); s.add_argument("model", nargs="?", default=DEFAULT_MODEL)
+    s = sub.add_parser("show"); s.add_argument("key"); s.add_argument("--model")
+    s = sub.add_parser("enable", help="by the person's word: puts a queued or passed rule into the personal layer (the gate is LL5)")
+    s.add_argument("key"); s.add_argument("--model"); s.add_argument("--force", action="store_true", help="also a candidate, rejected or flagged rule")
+    s.add_argument("--yes", action="store_true", help="do not ask for confirmation (the text is still printed)")
+    s = sub.add_parser("disable"); s.add_argument("key"); s.add_argument("--model")
+    s = sub.add_parser("withdraw"); s.add_argument("key"); s.add_argument("--model")
+    s = sub.add_parser("render"); s.add_argument("model", nargs="?", default=None)
     sub.add_parser("status")
     sub.add_parser("serve")
     a = ap.parse_args(argv)
@@ -456,15 +537,23 @@ def main(argv=None):
         if a.cmd == "list":
             print(rules.list(a.status, a.model))
         elif a.cmd == "show":
-            print(rules.show(a.key))
+            print(rules.show(a.key, a.model))
         elif a.cmd == "enable":
-            print(rules.set_status(a.key, "enabled"))
+            print(rules.show(a.key, a.model))                 # the person reads the exact text that goes into the prompt
+            if not a.yes:
+                if not sys.stdin.isatty():
+                    print("error: enabling needs a person: run it in a terminal, or pass --yes after reading the text above")
+                    return 1
+                if input("Enable this rule in the personal layer? [y/N] ").strip().lower() not in ("y", "yes"):
+                    print("not enabled")
+                    return 1
+            print(rules.set_status(a.key, "enabled", a.model, force=a.force))
         elif a.cmd == "disable":
-            print(rules.set_status(a.key, "retired"))
+            print(rules.set_status(a.key, "retired", a.model))
         elif a.cmd == "withdraw":
-            print(rules.withdraw(a.key))
+            print(rules.withdraw(a.key, model=a.model))
         elif a.cmd == "render":
-            print(f"rendered {rules.render(a.model)}")
+            print(f"rendered {rules.render(a.model or rules.current_model())}")
         else:
             print(json.dumps(rules.status(), ensure_ascii=False, indent=1))
         return 0

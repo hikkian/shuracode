@@ -57,6 +57,30 @@ class CommandReference(unittest.TestCase):
         self.assertIn('"kk"', str(ctx.exception))
         self.assertIn(src["items"][0]["id"], str(ctx.exception))
 
+    def test_a_pending_kazakh_text_is_marked_and_the_flag_is_not_published(self):
+        import json
+        import tempfile
+        src = json.loads(build_commands.SRC.read_text())
+        pending = [i for i in src["items"] if i.get("kk_pending") is True]
+        self.assertTrue(pending, "the entries added without a reviewed Kazakh text carry kk_pending")
+        built = {i["id"]: i for i in build_commands.build()["items"]}
+        for i in pending:
+            self.assertEqual(built[i["id"]]["kk"], build_commands.KK_PENDING)
+            self.assertNotIn("kk_pending", built[i["id"]])
+        self.assertNotIn("kk_pending", (ROOT / "docs" / "commands.json").read_text())
+        # the flag must be exactly true: a missing kk with kk_pending false still fails
+        item = next(i for i in src["items"] if i.get("kk_pending") is True)
+        item["kk_pending"] = False
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "commands.src.json"
+            path.write_text(json.dumps(src, ensure_ascii=False))
+            original, build_commands.SRC = build_commands.SRC, path
+            try:
+                with self.assertRaises(SystemExit):
+                    build_commands.build()
+            finally:
+                build_commands.SRC = original
+
     def test_terse_commands_are_marked_as_tiel_only(self):
         items = {i["id"]: i for i in build_commands.build()["items"]}
         for k in ("terse-on", "terse-off"):

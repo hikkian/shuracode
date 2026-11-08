@@ -168,7 +168,7 @@ words. A rule never enters the prompt on its own. After you confirm a correction
 candidate that waits for a night check against your own tasks (the gate, coming in the next steps). Enabled rules are
 rendered into your personal layer, `~/.local/share/shura/skills/<model>/harness.md`, which the harness plugin adds after
 the base harness of the model: the personal layer can add to the base, never replace it. `/rules` shows the queue and
-what is enabled; `python3 mcp/rules.py enable|disable <key>` is the person's switch in the terminal. The rules live in
+what is enabled; `python3 mcp/rules.py enable|disable <key>` is the person's switch in the terminal (it prints the rule and asks; a queued or passed rule only, `--force` for the rest). The model is asked before it may run that script. The rules live in
 the same local database as the memory; nothing leaves the machine.
 
 ## Build and Plan

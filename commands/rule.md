@@ -15,5 +15,6 @@ cost: <words>
 If nothing was given after /rule, build it from the correction or the "do it this way" the person just confirmed in this
 conversation. When the person answers "yes" (or edits the text), call rule_propose with that key, when, do and why: the rule
 is queued for the night check against their control set. It never enters the prompt by itself: enabling is the person's
-word after the check. If they say "no", call rule_withdraw so it is not proposed again. Then tell them in one line what
-happened (queued / withdrawn / already exists).
+word after the check, in their terminal, never a command you run. If they say "no", call rule_withdraw with the same key,
+when, do and why so the refusal is remembered and it is not proposed again. Then tell them in one line what happened
+(queued / withdrawn / already exists).

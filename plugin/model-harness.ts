@@ -9,7 +9,7 @@
 import type { PluginModule } from "@opencode-ai/plugin"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
-import { expandHome, harnessKeyFor, personalLayerDir, skillsPointer } from "./lib/model-harness.ts"
+import { expandHome, harnessKeyFor, personalLayerDir, rememberCurrentModel, skillsPointer } from "./lib/model-harness.ts"
 
 const plugin: PluginModule & { id: string } = {
   id: "shuracode-model-harness",
@@ -29,6 +29,7 @@ const plugin: PluginModule & { id: string } = {
           if (pointer) output.system.push(pointer)
         }
         if (userDir) {
+          await rememberCurrentModel(userDir, key) // mcp/rules.py reads it: the model of the running session, not a guess
           const layer = await personalLayerDir(path.join(userDir, key))
           const text = await readFile(path.join(layer, "harness.md"), "utf8").catch(() => "")
           if (text.trim()) output.system.push(text)

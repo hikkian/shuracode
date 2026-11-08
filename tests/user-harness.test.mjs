@@ -2,7 +2,7 @@
 // the base, follows a CURRENT version pointer, and is never another model's.
 import test from "node:test"
 import assert from "node:assert/strict"
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { expandHome, personalLayerDir } from "../plugin/lib/model-harness.ts"
@@ -83,4 +83,17 @@ test("~ in the option means the home folder", () => {
   assert.equal(expandHome("~/.local/share/shura/skills"), path.join(os.homedir(), ".local/share/shura/skills"))
   assert.equal(expandHome("/abs/path"), "/abs/path")
   assert.equal(expandHome("~"), os.homedir())
+})
+
+test("the plugin records the model of the request in CURRENT_MODEL, rewriting it only when it changes", async () => {
+  const user = await folder({ "tiel/harness.md": "x\n" })
+  const hook = (await plugin.server({}, { userHarnessDir: user }))["experimental.chat.system.transform"]
+  await hook({ model: { id: "tiel-coder" } }, { system: [] })
+  assert.equal((await readFile(path.join(user, "CURRENT_MODEL"), "utf8")).trim(), "tiel")
+  const before = (await stat(path.join(user, "CURRENT_MODEL"))).mtimeNs
+  await hook({ model: { id: "tiel-coder" } }, { system: [] })
+  assert.equal((await stat(path.join(user, "CURRENT_MODEL"))).mtimeNs, before)
+  await hook({ model: { id: "sage" } }, { system: [] })
+  assert.equal((await readFile(path.join(user, "CURRENT_MODEL"), "utf8")).trim(), "sage")
+  await rm(user, { recursive: true, force: true })
 })
