@@ -144,6 +144,18 @@ class SqlStoreTest(unittest.TestCase):
         msg = self.store.save("editor", "uses VS Code", "user", "VS Code with the Shura theme")
         self.assertIn("Confirmed memory 'editor' again", msg)
 
+    def test_a_type_change_with_the_same_text_is_a_version_too(self):
+        self.store.save("editor", "uses vim", "user", "vim")
+        msg = self.store.save("editor", "uses vim", "feedback", "vim")
+        self.assertIn("old version is kept", msg)
+        self.assertIn("type: feedback", self.store.read("editor"))
+
+    def test_non_string_arguments_are_tool_errors(self):
+        for reply in (M.handle(self.store, {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "save", "arguments": {
+                          "name": "x", "description": 5, "type": "user", "content": "c"}}}),
+                      M.handle(self.store, {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "read", "arguments": {"name": ["x"]}}})):
+            self.assertTrue(reply["result"]["isError"], reply)
+
     def test_save_delete_save_with_the_same_name_works(self):
         self.store.save("k", "first", "user", "one")
         self.store.delete("k")

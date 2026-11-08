@@ -289,6 +289,9 @@ class SqlStore:
             raise MemoryError(str(e))
 
     def save(self, name, description, type, content):
+        for label, value in (("name", name), ("description", description), ("type", type), ("content", content)):
+            if not isinstance(value, str):
+                raise MemoryError(f"{label} must be a string")
         if type not in TYPES:
             raise MemoryError(f"type must be one of {', '.join(TYPES)}")
         if len(" ".join(description.split())) > MAX_DESCRIPTION:
@@ -299,7 +302,7 @@ class SqlStore:
         except self.L.StoreError as e:
             raise MemoryError(str(e))
         existing = self.store.get(key)
-        if existing is not None and (existing["body"] != content.strip() or existing["title"] != " ".join(description.split())):
+        if existing is not None and (existing["body"] != content.strip() or existing["title"] != " ".join(description.split()) or existing["kind"] != kind):
             # a correction: the old text stays in history as a superseded version (/fix), the key now reads the new text
             rec = self._wrap(self.store.fix, key, title=description, body=content, kind=kind)
             return f"Updated memory '{rec['key']}' (it said: {existing['title']}; the old version is kept in history). Passport: {rec['passport_line']}."
@@ -316,16 +319,22 @@ class SqlStore:
         return msg
 
     def read(self, name):
+        if not isinstance(name, str):
+            raise MemoryError("name must be a string")
         rec = self._wrap(self.store.read, name)
         contr = ("\ncontradictions: " + "; ".join(f"{c['with']} ({c['status']})" for c in rec["contradictions"])) if rec["contradictions"] else ""
         return (f"---\nname: {rec['key']}\ndescription: {rec['title']}\ntype: {LEGACY_TYPE_OF_KIND.get(rec['kind'], 'reference')}\n"
                 f"kind: {rec['kind']}\npassport: {rec['passport_line']}\nupdated: {rec['passport']['updated_at'][:10]}{contr}\n---\n\n{rec['body']}\n")
 
     def delete(self, name):
+        if not isinstance(name, str):
+            raise MemoryError("name must be a string")
         out = self._wrap(self.store.forget, name)
         return f"Forgot memory '{out['key']}' (soft: /memory restore {out['key']} brings it back)."
 
     def search(self, query, limit=8):
+        if not isinstance(query, str):
+            raise MemoryError("query must be a string")
         recs = self.store.search(query, limit=limit) if query.strip() else self.store.list_all()
         if not recs:
             return "No memories yet." if not query.strip() else f"Nothing found for '{query}'."
@@ -387,7 +396,7 @@ def handle(store, msg):
             text, error = f"unknown tool: {tool}", True
         except TypeError as e:
             text, error = f"bad arguments for {tool}: {e}", True
-        except (MemoryError, OSError, sqlite3.Error) as e:
+        except (MemoryError, OSError, sqlite3.Error, AttributeError, ValueError) as e:
             text, error = str(e), True
         return {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": error}}
     return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": f"method not found: {method}"}}
