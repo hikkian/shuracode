@@ -1,6 +1,7 @@
 // The per-model harness (RSI): which harness folder a model id uses, and the pointer to its skills. Standard library only, so it can be
 // tested on its own.
 import { readdir, readFile } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 
 export const MODEL_KEYS = ["tiel", "sage", "gemma"] as const
@@ -54,4 +55,25 @@ export async function skillsPointer(modelDir: string): Promise<string> {
     lines.push(`- ${fm.name}: ${fm.description} (file: ${file}${where})`)
   }
   return lines.length ? "Skills of this model (read the SKILL.md of a skill when its situation comes up):\n" + lines.join("\n") : ""
+}
+
+// `~/x` -> the home folder (the config template names the personal layer that way).
+export function expandHome(p: string): string {
+  if (p === "~") return os.homedir()
+  if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2))
+  return p
+}
+
+// The folder of a model's personal layer: <userHarnessDir>/<model>/, or, when a CURRENT file names a version (LL4b: versions/NNN/),
+// that version's folder. A CURRENT that names nothing usable falls back to the model folder itself.
+export async function personalLayerDir(modelDir: string): Promise<string> {
+  const current = (await readFile(path.join(modelDir, "CURRENT"), "utf8").catch(() => "")).trim()
+  if (!current || current.includes("..") || path.isAbsolute(current) || current.includes("/")) return modelDir
+  const versioned = path.join(modelDir, "versions", current)
+  try {
+    await readFile(path.join(versioned, "harness.md"), "utf8")
+    return versioned
+  } catch {
+    return modelDir
+  }
 }
