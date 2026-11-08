@@ -12,6 +12,24 @@
    "example": "/remember I prefer small, focused commits"
   },
   {
+   "id": "rule",
+   "name": "/rule",
+   "category": "Memory",
+   "en": "Propose a rule about how Shura should work (goes to the night check, never straight into the prompt)",
+   "ru": "Предложить правило о том, как Shura работает (уходит на ночную проверку, не прямо в промпт).",
+   "kk_pending": true,
+   "source": "shuracode"
+  },
+  {
+   "id": "rules",
+   "name": "/rules",
+   "category": "Memory",
+   "en": "Show the rules of the personal layer and their status",
+   "ru": "Показать правила личного слоя и их статус.",
+   "kk_pending": true,
+   "source": "shuracode"
+  },
+  {
    "id": "fix",
    "name": "/fix",
    "category": "Memory",

@@ -22,6 +22,7 @@ CATEGORY_KK = {"Help": "Анықтама", "Model": "Модель", "Memory": "�
                "Input": "Енгізу", "Shura (terminal)": "Shura (терминалда)"}
 SOURCE_NOTE = {"shuracode": ("ShuraCode", "ShuraCode", "ShuraCode"), "engine": ("engine", "движок", "қозғалтқыш"), "shura": ("shura", "shura", "shura")}
 LANGS = ("en", "ru", "kk")
+KK_PENDING = "(translation pending)"   # entries with "kk_pending": true and no "kk": the Kazakh text waits for a native reader
 
 
 def front_matter_description(path):
@@ -42,6 +43,8 @@ def build():
             item["en"] = desc                         # the command file is the source of the English text
     items = list(by_id.values())
     for i in items:
+        if i.get("kk_pending") is True and not str(i.get("kk", "")).strip():
+            i["kk"] = KK_PENDING          # a translation a native reader has not reviewed yet is not shown as Kazakh
         for lang in LANGS:
             if not str(i.get(lang, "")).strip():
                 raise SystemExit(f"docs/commands.src.json: entry '{i['id']}' has no \"{lang}\" text (every entry needs en, ru and kk)")

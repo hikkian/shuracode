@@ -125,6 +125,8 @@ shuracode update | rollback | doctor | version | help
 | `/remember [fact]` | saves the fact; without an argument, saves the most useful thing learned in this session |
 | `/forget <topic>` | finds the matching memory and deletes it; asks if several match |
 | `/memory` | lists what is remembered and flags outdated or duplicate memories |
+| `/rule [text]` | proposes a rule about how Shura works; it goes to the night check, never straight into the prompt |
+| `/rules [status or key]` | lists the rules of the personal layer with their status |
 | `/test` | finds how this project runs its tests, runs them, fixes failures, and shows the real result |
 | `/commit` | commits one logical change in the repository's style; never pushes, adds no attribution lines |
 | `/review` | reviews uncommitted changes (or a commit, branch or PR) |
@@ -157,6 +159,17 @@ or deleted.
 Measured with Tiel-Coder: a preference saved in one session was applied in three new sessions out of
 three. A change of mind updated the existing memory instead of adding a duplicate. A GitHub token was
 refused.
+
+## Rules (level 2)
+
+Besides facts, Shura can learn *how* you want it to work: one short rule, "when <situation> -> do <action>", in your own
+words. A rule never enters the prompt on its own. After you confirm a correction, the model records one *case*
+(`rule_case`); one case is a note. A second case from another session, or an explicit `/rule`, makes the rule a
+candidate that waits for a night check against your own tasks (the gate, coming in the next steps). Enabled rules are
+rendered into your personal layer, `~/.local/share/shura/skills/<model>/harness.md`, which the harness plugin adds after
+the base harness of the model: the personal layer can add to the base, never replace it. `/rules` shows the queue and
+what is enabled; `python3 mcp/rules.py enable|disable <key>` is the person's switch in the terminal. The rules live in
+the same local database as the memory; nothing leaves the machine.
 
 ## Build and Plan
 
