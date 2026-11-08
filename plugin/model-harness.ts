@@ -30,10 +30,11 @@ const plugin: PluginModule & { id: string } = {
         }
         if (userDir) {
           await rememberCurrentModel(userDir, key) // mcp/rules.py reads it: the model of the running session, not a guess
-          const layer = await personalLayerDir(path.join(userDir, key))
+          const modelDir = path.join(userDir, key)
+          const layer = await personalLayerDir(modelDir) // versions/NNN holds the rules; the skills stay in <model>/skills
           const text = await readFile(path.join(layer, "harness.md"), "utf8").catch(() => "")
           if (text.trim()) output.system.push(text)
-          const pointer = await skillsPointer(layer)
+          const pointer = await skillsPointer(modelDir)
           if (pointer) output.system.push(pointer)
         }
       },

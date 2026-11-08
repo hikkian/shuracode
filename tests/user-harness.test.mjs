@@ -72,6 +72,12 @@ test("CURRENT points at a version folder; a bad pointer falls back to the model 
   const out = { system: [] }
   await hook({ model: { id: "tiel-coder" } }, out)
   assert.deepEqual(out.system, ["version two\n"])
+  await mkdir(path.join(user, "tiel/skills/deploy"), { recursive: true })
+  await writeFile(path.join(user, "tiel/skills/deploy/SKILL.md"), SKILL("deploy", "Deploy with make deploy"))
+  const withSkills = { system: [] }
+  await hook({ model: { id: "tiel-coder" } }, withSkills)
+  assert.equal(withSkills.system[0], "version two\n")
+  assert.match(withSkills.system[1], /deploy: Deploy with make deploy/, "the skills pointer comes from the model folder even when CURRENT names a version")
   await writeFile(path.join(user, "tiel/CURRENT"), "../../etc\n")
   assert.equal(await personalLayerDir(path.join(user, "tiel")), path.join(user, "tiel"))
   await writeFile(path.join(user, "tiel/CURRENT"), "009\n")

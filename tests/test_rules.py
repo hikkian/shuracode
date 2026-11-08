@@ -389,6 +389,88 @@ class Versions(RulesCase):
         self.assertTrue((self.skills / "tiel" / "versions" / cur / "harness.md").is_file())
 
 
+class SecondReviewLL4b(RulesCase):
+    def test_a_rolled_back_rule_gives_no_notice_and_the_list_shows_how_full_the_layer_is(self):
+        self.rules.propose("a", "x", "y", "z")
+        self.rules.propose("b", "p", "q", "r")
+        self.rules.set_status("a", "enabled")
+        self.rules.set_status("b", "enabled")
+        self.rules.rollback("tiel")
+        listing = self.rules.list()
+        self.assertFalse(listing.startswith("Notice"), listing)
+        self.assertIn("layer tiel: 1/12 rules, ~", listing)
+        self.assertIn("rolled back", self.rules.show("b"))
+        self.rules.set_status("b", "enabled", force=True)
+        self.assertNotIn("rolled back", self.rules.show("b"))
+
+    def test_merge_dedupes_sources_and_retires_queued_sources_too(self):
+        self.rules.propose("a", "x", "y", "z")
+        self.rules.propose("b", "p", "q", "r")
+        with self.assertRaises(R.RuleError):
+            self.rules.merge("ab", ["a", "a"], "w", "d", "y")
+        self.rules.merge("ab", ["a", "b", "a"], "w", "d", "y")
+        self.rules.set_status("ab", "enabled")
+        self.assertIn("a [retired]", self.rules.list())
+        self.assertIn("b [retired]", self.rules.list())
+
+    def test_no_new_version_when_the_set_of_rules_does_not_change(self):
+        self.rules.propose("a", "x", "y", "z")
+        self.rules.set_status("a", "enabled")
+        self.rules.set_status("a", "enabled", force=True)
+        self.assertEqual(len(self.rules.versions("tiel")), 1)
+        self.rules.propose("q", "x", "y", "z")
+        with self.assertRaises(R.RuleError):
+            self.rules.set_status("q", "retired")        # not in the layer: nothing to retire, no empty version
+        self.assertEqual(len(self.rules.versions("tiel")), 1)
+
+    def test_a_gate_passed_rule_links_its_version_to_the_gate_run_and_a_gate_rejected_one_is_not_requeued_by_cases(self):
+        self.rules.propose("p", "w", "d", "y")
+        r = self.rules._get("p", "tiel")
+        r["notes"]["gate"] = {"run": 3, "decision": "passed", "delta": 0.1, "ci_low": 0.02, "time_ratio": 1.0, "tokens_ratio": 1.0}
+        self.rules.db.execute("UPDATE rule SET status='passed', notes=? WHERE id=?", (json.dumps(r["notes"]), r["id"]))
+        self.rules.set_status("p", "enabled")
+        self.assertEqual(self.rules.versions("tiel")[0]["gate_run_id"], 3)
+        self.rules.case("bad", "w", "d", "y")
+        r = self.rules._get("bad", "tiel")
+        r["notes"]["gate_rejected"] = True
+        r["notes"]["gate"] = {"run": 4, "decision": "rejected", "delta": -0.1, "ci_low": -0.2, "time_ratio": 1.0, "tokens_ratio": 1.0}
+        self.rules.db.execute("UPDATE rule SET status='rejected', notes=? WHERE id=?", (json.dumps(r["notes"]), r["id"]))
+        msg = self.other_session().case("bad", "w", "d", "y")
+        self.assertIn("failed the night check", msg)
+        self.assertIn("bad [rejected]", self.rules.list())
+        self.assertIn("gate: run 4 rejected", self.rules.show("bad"))
+
+    def test_the_ablation_result_is_shown(self):
+        self.rules.propose("u", "w", "d", "y")
+        self.rules.set_status("u", "enabled")
+        r = self.rules._get("u", "tiel")
+        r["notes"]["ablation"] = {"run": 5, "decision": "no_benefit", "delta": 0.0, "ci_low": -0.01}
+        self.rules.db.execute("UPDATE rule SET notes=? WHERE id=?", (json.dumps(r["notes"]), r["id"]))
+        self.assertIn("ablation: run 5 no_benefit", self.rules.show("u"))
+
+    def test_the_cli_versions_rollback_and_merge(self):
+        import io
+        from contextlib import redirect_stdout
+        db, skills = str(self.dir / "cli.sqlite"), str(self.dir / "cliskills")
+        r = R.Rules(db, skills, session="cli")
+        r.propose("a", "x", "y", "z"); r.propose("b", "p", "q", "w")
+        r.set_status("a", "enabled"); r.set_status("b", "enabled")
+        r.close()
+        def run(*args):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                code = R.main(["--db", db, "--skills-dir", skills, *args])
+            return code, buf.getvalue()
+        code, out = run("versions", "--model", "tiel")
+        self.assertEqual(code, 0); self.assertIn("002 (live)", out)
+        code, out = run("rollback", "--model", "tiel")
+        self.assertEqual(code, 0); self.assertIn("back at version 001", out)
+        code, out = run("merge", "ab", "--sources", "a,b", "--when", "w", "--do", "d", "--why", "y", "--model", "tiel")
+        self.assertEqual(code, 0); self.assertIn("queued", out)
+        reply = R.handle(R.Rules(db, skills, session="mcp"), {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "rule_versions", "arguments": {"model": "tiel"}}})
+        self.assertIn("001 (live)", reply["result"]["content"][0]["text"])
+
+
 class Protocol(unittest.TestCase):
     def test_stdio_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmp:

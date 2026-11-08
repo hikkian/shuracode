@@ -44,8 +44,8 @@ KINDS = ("rule", "procedure")
 MAX_WHEN_WORDS, MAX_DO_WORDS, MAX_RULE_WORDS = 25, 40, 60
 MAX_WHY_CHARS = 200
 MAX_ENABLED = 12            # §4.7: always-on rules per model
-TOKEN_BUDGET = 600          # §4.7: the rendered personal layer, in tokens (estimated: characters / 3.5, mixed Russian and English)
-CHARS_PER_TOKEN = 3.5
+TOKEN_BUDGET = 600          # §4.7: the rendered personal layer, in tokens (estimated: characters / 3.5 with a 15 % margin, as rsi/budget.py)
+CHARS_PER_TOKEN, TOKEN_MARGIN = 3.5, 1.15
 # the same escaping as Shura's knowledge store (gateway/lifelong_store.py): template markers never reach a prompt raw
 CONTROL_TOKENS = ["<|im_start|>", "<|im_end|>", "<|endoftext|>", "<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>",
                   "<start_of_turn>", "<end_of_turn>", "<tool_call>", "</tool_call>", "<tool_response>", "</tool_response>",
@@ -174,7 +174,7 @@ def rule_text(when, do):
 
 
 def est_tokens(text):
-    return int(len(text) / CHARS_PER_TOKEN + 0.999)
+    return int(len(text) / CHARS_PER_TOKEN * TOKEN_MARGIN + 0.999)
 
 
 def rule_form(r):
@@ -185,6 +185,13 @@ def rule_form(r):
     if n.get("gate"):
         g = n["gate"]
         gate = f"\ngate: run {g.get('run')} {g.get('decision')}: score {g.get('delta')} (lower {g.get('ci_low')}), time x{g.get('time_ratio')}, tokens x{g.get('tokens_ratio')}"
+    if n.get("ablation"):
+        a = n["ablation"]
+        gate += f"\nablation: run {a.get('run')} {a.get('decision')} (score without it {a.get('delta')}, lower {a.get('ci_low')}); the person decides whether to retire it"
+    if n.get("gate_skipped"):
+        gate += f"\ngate skipped: {n['gate_skipped'].get('reason')}"
+    if n.get("rolled_back"):
+        gate += "\nrolled back: taken out of the layer by a rollback; enable brings it back"
     return (f"RULE {n['key']} [{r['status']}]\nwhen: {n['when']}\ndo: {n['do']}\nwhy: {n['why']}\nborn_from: {r['born_from']}\n"
             f"cost: {n['cost_words']} words\nmodel: {n['model']}, kind: {r['kind']}, cases: {len(r['cases'])}{flag}{merged}{gate}")
 
@@ -309,6 +316,9 @@ class Rules:
                         "check after a second case in another session, or at once with /rule.")
             if r["status"] == "rejected" and r["notes"].get("declined"):
                 return f"Rule '{key}' was declined by the person earlier; it is not proposed again (an explicit /rule would queue it)."
+            if r["status"] == "rejected" and r["notes"].get("gate_rejected"):
+                self._add_case(r["id"], why)
+                return f"Rule '{key}' failed the night check earlier (§4.5); the case is recorded but it is not queued again (an explicit /rule would)."
             if r["status"] in ("enabled", "passed", "testing", "queued", "retired"):
                 self._add_case(r["id"], why)
                 self._journal(actor, "rule_case", f"{key} +1 ({r['status']})")
@@ -358,8 +368,11 @@ class Rules:
 
     def merge(self, key, sources, when, do, why, model=None, actor="user"):
         """One rule for several (§4.7): queued like any candidate; the sources retire when the merged rule is enabled."""
-        if not isinstance(sources, (list, tuple)) or len(sources) < 2:
+        if not isinstance(sources, (list, tuple)):
             raise RuleError("sources must list at least two rule keys")
+        sources = list(dict.fromkeys(slug(x) for x in sources))
+        if len(sources) < 2:
+            raise RuleError("sources must list at least two different rule keys")
         key, text, notes, model, kind = self._validate(key, when, do, why, model, None)
         with Tx(self.db):
             srcs = []
@@ -411,12 +424,17 @@ class Rules:
         """Rules that passed the night check and wait for the person's word (DESIGN §11 p. 1): shown until enabled or retired."""
         out = []
         for r in self._rows("status='passed'"):
-            if model and r["notes"]["model"] != model:
-                continue
             g = r["notes"].get("gate") or {}
-            out.append(f"Notice: rule '{r['notes']['key']}' ({r['notes']['model']}) passed the night check"
-                       f"{' (run ' + str(g['run']) + ', score ' + str(g.get('delta')) + ')' if g else ''}: the person can enable it in the terminal.")
+            if (model and r["notes"]["model"] != model) or g.get("decision") != "passed" or r["notes"].get("rolled_back"):
+                continue
+            out.append(f"Notice: rule '{r['notes']['key']}' ({r['notes']['model']}) passed the night check (run {g['run']}, score {g.get('delta')}): "
+                       "the person can enable it in the terminal.")
         return out
+
+    def fill_line(self, model):
+        """How full the layer is, for the model and the person: «layer tiel: 11/12 rules, ~540/600 tokens»."""
+        enabled = [r for r in self._rows("status='enabled'") if r["notes"]["model"] == model]
+        return f"layer {model}: {len(enabled)}/{MAX_ENABLED} rules, ~{est_tokens(self._render_rows(enabled))}/{TOKEN_BUDGET} tokens"
 
     def list(self, status=None, model=None):
         rows = self._rows()
@@ -429,6 +447,8 @@ class Rules:
         if not rows:
             return "No rules yet." if not (status or model) else "No rules match."
         lines = self.notices(model) if not status else []
+        models = sorted({r["notes"]["model"] for r in rows}) if not model else [model]
+        lines += [self.fill_line(m) for m in models]
         for r in rows:
             n = r["notes"]
             flag = " !instruction-like" if n.get("flagged") else ""
@@ -471,15 +491,21 @@ class Rules:
                 if tokens > TOKEN_BUDGET:
                     raise RuleError(f"the layer of {model} would be ~{tokens} tokens, over the budget of {TOKEN_BUDGET} (§4.7); merge or retire a rule first")
                 ts = now_iso()
-                self.db.execute("UPDATE rule SET status='enabled', enabled_at=?, retired_at=NULL WHERE id=?", (ts, r["id"]))
-                for x in self._rows("status='enabled'"):
+                r["notes"].pop("rolled_back", None)
+                self.db.execute("UPDATE rule SET status='enabled', enabled_at=?, retired_at=NULL, notes=? WHERE id=?", (ts, json.dumps(r["notes"], ensure_ascii=False), r["id"]))
+                for x in self._rows("status IN ('enabled','passed','queued','testing','candidate')"):
                     if x["notes"]["model"] == model and x["notes"]["key"] in replaced:
                         self.db.execute("UPDATE rule SET status='retired', retired_at=? WHERE id=?", (ts, x["id"]))
                         self._journal(actor, "rule_retired", f"{x['notes']['key']} replaced by {key}")
+                gate_run_id = (r["notes"].get("gate") or {}).get("run")
             else:
+                if r["status"] != "enabled":
+                    raise RuleError(f"rule '{key}' is {r['status']}, not in the layer; use withdraw for a candidate")
                 self.db.execute("UPDATE rule SET status='retired', retired_at=? WHERE id=?", (now_iso(), r["id"]))
+                gate_run_id = None
             self._journal(actor, f"rule_{status}", key)
-            version = self._new_version(model, f"{status} {key}", actor)
+            version, text = self._new_version(model, f"{status} {key}", actor, gate_run_id)
+        self._write_version(model, version, text)
         self.render(model)
         return f"Rule '{key}' is {status}; version {version:03d} of the personal layer of {model} is live.\n{r['text']}"
 
@@ -508,17 +534,22 @@ class Rules:
         return out
 
     def _new_version(self, model, reason, actor="user", gate_run_id=None):
-        """Inside a transaction: snapshot the enabled rules of `model` as the next version, make it current and write it to disk."""
+        """Inside a transaction: snapshot the enabled rules of `model` as the next version and make it current (the files are written by
+        the caller after COMMIT, so CURRENT never names a version the database does not have). The same set of rules as the current
+        version makes no new version. Returns (number, text)."""
         enabled = [r for r in self._rows("status='enabled'") if r["notes"]["model"] == model]
+        ids = sorted(r["id"] for r in enabled)
         text = self._render_rows(enabled)
+        cur = self.db.execute("SELECT number, rule_ids FROM rule_version WHERE model=? AND is_current=1", (model,)).fetchone()
+        if cur is not None and sorted(json.loads(cur["rule_ids"] or "[]")) == ids:
+            return cur["number"], text
         number = (self.db.execute("SELECT MAX(number) FROM rule_version WHERE model=?", (model,)).fetchone()[0] or 0) + 1
         self.db.execute("UPDATE rule_version SET is_current=0 WHERE model=?", (model,))
         self.db.execute("INSERT INTO rule_version(model, number, rendered_harness, rule_ids, created_at, gate_run_id, is_current) VALUES (?,?,?,?,?,?,1)",
-                        (model, number, text, json.dumps([r["id"] for r in enabled]), now_iso(), gate_run_id))
+                        (model, number, text, json.dumps(ids), now_iso(), gate_run_id))
         self._journal(actor, "version_current", f"{model} {number:03d}: {reason}")
-        self._write_version(model, number, text)
         self.experience(model, f"version {number:03d} live ({reason}); {len(enabled)} rules, ~{est_tokens(text)} tokens")
-        return number
+        return number, text
 
     def _write_version(self, model, number, text):
         folder = self.skills_dir / model / "versions" / f"{number:03d}"
@@ -548,14 +579,17 @@ class Rules:
                 if r["notes"]["model"] != model:
                     continue
                 if r["id"] in ids and r["status"] != "enabled":
-                    self.db.execute("UPDATE rule SET status='enabled', enabled_at=COALESCE(enabled_at, ?), retired_at=NULL WHERE id=?", (ts, r["id"]))
+                    r["notes"].pop("rolled_back", None)
+                    self.db.execute("UPDATE rule SET status='enabled', enabled_at=COALESCE(enabled_at, ?), retired_at=NULL, notes=? WHERE id=?",
+                                    (ts, json.dumps(r["notes"], ensure_ascii=False), r["id"]))
                 elif r["id"] not in ids and r["status"] == "enabled":
-                    self.db.execute("UPDATE rule SET status='passed' WHERE id=?", (r["id"],))
+                    r["notes"]["rolled_back"] = True          # approved, taken out by the rollback: no notice nags about it
+                    self.db.execute("UPDATE rule SET status='passed', notes=? WHERE id=?", (json.dumps(r["notes"], ensure_ascii=False), r["id"]))
             self.db.execute("UPDATE rule_version SET is_current=0 WHERE model=?", (model,))
             self.db.execute("UPDATE rule_version SET is_current=1 WHERE id=?", (target["id"],))
             self._journal(actor, "version_rollback", f"{model} {cur['number']:03d} -> {target_no:03d}")
-            self._write_version(model, target_no, target["rendered_harness"] or "")
             self.experience(model, f"rollback {cur['number']:03d} -> {target_no:03d}")
+        self._write_version(model, target_no, target["rendered_harness"] or "")
         self.render(model)
         return f"The personal layer of {model} is back at version {target_no:03d} ({len(ids)} rules); {cur['number']:03d} stays in versions/ for a roll forward."
 
