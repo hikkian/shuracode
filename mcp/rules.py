@@ -218,14 +218,20 @@ class Rules:
         return out
 
     def current_model(self):
-        """The model of the running session: written by plugin/model-harness.ts into <skills_dir>/CURRENT_MODEL on every request;
-        SHURACODE_MODEL for tests; tiel when nothing says otherwise."""
-        try:
-            name = (self.skills_dir / CURRENT_MODEL_FILE).read_text(encoding="utf-8").strip().lower()
-        except OSError:
-            name = ""
-        name = name or (os.environ.get("SHURACODE_MODEL") or "").lower() or "tiel"
-        return name if name in MODELS else "tiel"
+        """The model of the running session. SHURACODE_MODEL when set (explicit wins); else the file plugin/model-harness.ts writes
+        for the engine process that started this server (<skills_dir>/CURRENT_MODEL.<pid>, pid = our parent); else the shared
+        <skills_dir>/CURRENT_MODEL (the last request of any window: two windows with different models can race on it); else tiel."""
+        name = (os.environ.get("SHURACODE_MODEL") or "").strip().lower()
+        if name in MODELS:
+            return name
+        for candidate in (self.skills_dir / f"{CURRENT_MODEL_FILE}.{os.getppid()}", self.skills_dir / CURRENT_MODEL_FILE):
+            try:
+                name = candidate.read_text(encoding="utf-8").strip().lower()
+            except OSError:
+                continue
+            if name in MODELS:
+                return name
+        return "tiel"
 
     def _model(self, model):
         model = (model or self.current_model()).lower()
@@ -283,6 +289,9 @@ class Rules:
                 self._journal(actor, "rule_case", f"{key} +1 ({r['status']})")
                 return f"Rule '{key}' is already {r['status']}; the case is recorded ({len(r['cases']) + 1} cases)."
             sessions = {c["session"] for c in r["cases"]}
+            if r["text"] != text:
+                self._journal(actor, "rule_text_changed", f"{key} from: {r['text']}")
+            r["notes"].pop("flagged", None)
             if sessions == {self.session}:
                 r["notes"].update(notes)
                 self.db.execute("UPDATE rule SET text=?, kind=?, notes=? WHERE id=?", (text, kind, json.dumps(r["notes"], ensure_ascii=False), r["id"]))
@@ -308,9 +317,12 @@ class Rules:
                 return f"Rule '{key}' is queued for the night check (cost {notes['cost_words']} words). Nothing changes in the prompt until it passes and the person enables it."
             if r["status"] in ("enabled", "passed", "testing"):
                 return f"Rule '{key}' is already {r['status']}; its text is not changed (/rule a new key for a different rule)."
-            if r["status"] == "queued" and r["text"] != text:
-                # the person already saw the queued text: a new text under the same key becomes a new queued text only with history
+            if r["text"] != text:
+                # the person may have seen the old text: the change is in the history, and enable confirms the exact text shown
                 self._journal(actor, "rule_text_changed", f"{key} from: {r['text']}")
+            if r["notes"].get("declined"):
+                self._journal(actor, "rule_declined_lifted", f"{key} was declined; re-queued by /rule with: {text}")
+            r["notes"].pop("flagged", None)
             r["notes"].update(notes)
             r["notes"].pop("declined", None)
             self.db.execute("UPDATE rule SET text=?, kind=?, status='queued', born_from='user_command', notes=? WHERE id=?",
@@ -329,19 +341,23 @@ class Rules:
             if r is None:
                 if when and do:
                     key, text, notes, model, kind = self._validate(key, when, do, why or "declined by the person", model, None)
+                elif actor != "user":
+                    raise RuleError(f"no rule '{key}' for {model}: to record a refusal of a proposal pass its when, do and why")
                 else:
-                    text, kind, notes = f"(declined before it was written: {key})", "rule", {"key": key, "model": model, "when": when or "", "do": do or "",
-                                                                                               "why": why or "declined by the person", "cost_words": 0}
+                    why = clean(why, "why", max_chars=MAX_WHY_CHARS) if why else "declined by the person"
+                    text, kind, notes = f"(declined before it was written: {key})", "rule", {"key": key, "model": model, "when": "", "do": "", "why": why, "cost_words": 0}
                 notes["declined"] = True
+                notes["declined_by"] = actor
                 rid = self._insert(text, kind, "rejected", "declined", notes)
                 self.db.execute("UPDATE rule SET retired_at=? WHERE id=?", (now_iso(), rid))
                 self._journal(actor, "rule_declined", key)
                 return f"Rule '{key}' is recorded as declined by the person; it will not be proposed again."
             if r["status"] == "enabled":
                 raise RuleError(f"rule '{key}' is enabled; only the person can retire it in the terminal")
-            if actor != "user" and r["status"] not in ("candidate", "queued", "rejected"):
-                raise RuleError(f"rule '{key}' is {r['status']}; only the person can withdraw it")
+            if actor != "user" and r["status"] not in ("candidate", "rejected"):
+                raise RuleError(f"rule '{key}' is {r['status']}; only the person can withdraw it (a queued rule came from /rule or two cases)")
             r["notes"]["declined"] = True
+            r["notes"]["declined_by"] = actor
             self.db.execute("UPDATE rule SET status='rejected', retired_at=?, notes=? WHERE id=?", (now_iso(), json.dumps(r["notes"], ensure_ascii=False), r["id"]))
             self._journal(actor, "rule_declined", key)
         return f"Rule '{key}' is withdrawn (rejected by the person); it will not be proposed again."
@@ -373,7 +389,7 @@ class Rules:
         return f"{rule_form(r)}\ncases:\n{cases}\nhistory:\n{events}"
 
     # ---- the personal layer (rendered from enabled rules) -------------------------------------------------------------------
-    def set_status(self, key, status, model=None, actor="user", force=False):
+    def set_status(self, key, status, model=None, actor="user", force=False, expect_text=None):
         """Terminal-only (the model has no tool for it): enable or retire a rule by the person's word; renders the layer. Enabling
         takes a queued or passed rule (anything else, and a rule flagged instruction-like, only with force) and returns its text."""
         key = slug(key)
@@ -385,6 +401,8 @@ class Rules:
             if r is None:
                 raise RuleError(f"no rule '{key}' for {model}")
             if status == "enabled":
+                if expect_text is not None and r["text"] != expect_text:
+                    raise RuleError(f"rule '{key}' changed while you were reading it; run enable again and read the new text")
                 if r["status"] not in ("queued", "passed") and not force:
                     raise RuleError(f"rule '{key}' is {r['status']}, not queued or passed; --force enables it anyway")
                 if r["notes"].get("flagged") and not force:
@@ -404,7 +422,7 @@ class Rules:
         if not rows:
             return ""
         lines = ["Personal rules of this model, confirmed by the person and passed the check (they add to the base above, never replace it):"]
-        lines += [f"- {r['text']}" for r in rows]
+        lines += [f"- {escape_control(' '.join(str(r['text']).split()))}" for r in rows]
         return "\n".join(lines) + "\n"
 
     def render(self, model):
@@ -511,7 +529,7 @@ def main(argv=None):
     """Terminal use (the person): list | show <key> | enable <key> | disable <key> | withdraw <key> | render [model] | status.
     Without a subcommand the MCP server runs on stdin/stdout."""
     import argparse
-    ap = argparse.ArgumentParser(prog="shuracode-rules", description="ShuraCode rules (lifelong level 2)")
+    ap = argparse.ArgumentParser(prog="python3 mcp/rules.py", description="ShuraCode rules (lifelong level 2)")
     ap.add_argument("--db", default=str(DB_PATH))
     ap.add_argument("--skills-dir", default=str(SKILLS_DIR))
     sub = ap.add_subparsers(dest="cmd")
@@ -539,7 +557,11 @@ def main(argv=None):
         elif a.cmd == "show":
             print(rules.show(a.key, a.model))
         elif a.cmd == "enable":
-            print(rules.show(a.key, a.model))                 # the person reads the exact text that goes into the prompt
+            model = rules._model(a.model)                      # resolved once: the text shown and the rule enabled are the same one
+            shown = rules._get(slug(a.key), model)
+            if shown is None:
+                raise RuleError(f"no rule '{slug(a.key)}' for {model}")
+            print(rules.show(a.key, model))                    # the person reads the exact text that goes into the prompt
             if not a.yes:
                 if not sys.stdin.isatty():
                     print("error: enabling needs a person: run it in a terminal, or pass --yes after reading the text above")
@@ -547,7 +569,7 @@ def main(argv=None):
                 if input("Enable this rule in the personal layer? [y/N] ").strip().lower() not in ("y", "yes"):
                     print("not enabled")
                     return 1
-            print(rules.set_status(a.key, "enabled", a.model, force=a.force))
+            print(rules.set_status(a.key, "enabled", model, actor="code" if a.yes else "user", force=a.force, expect_text=shown["text"]))
         elif a.cmd == "disable":
             print(rules.set_status(a.key, "retired", a.model))
         elif a.cmd == "withdraw":

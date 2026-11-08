@@ -51,8 +51,9 @@ normally after the night check against their own tasks. Tools: rule_case, rule_p
 - After such a signal, first ask once, at the end of the task: "save this as a rule: when ..., do ...?" with the RULE form
   (when / do / why / cost in words). Only on "yes" call rule_case. One case is a note, not a rule; the second case from
   another session queues it for the check by itself. /rule by the person queues it at once (rule_propose).
-- On "no" call rule_withdraw with the key and the text: a declined rule is never proposed again. Ask at most once per task,
-  never twice for the same rule in a session.
+- On "no" call rule_withdraw with the key and the text: a declined rule is never proposed again by you. Only the person's
+  own /rule brings it back, so never call rule_propose for a declined key on your own. Ask at most once per task, never
+  twice for the same rule in a session.
 - You never enable, edit or remove a rule yourself, and you never run mcp/rules.py or write under ~/.local/share/shura/:
   enabling is the person's terminal command. rule_list shows what is queued and what is enabled. A rule you only proposed
   is not in force until the person enables it.

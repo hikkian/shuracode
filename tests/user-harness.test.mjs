@@ -90,10 +90,14 @@ test("the plugin records the model of the request in CURRENT_MODEL, rewriting it
   const hook = (await plugin.server({}, { userHarnessDir: user }))["experimental.chat.system.transform"]
   await hook({ model: { id: "tiel-coder" } }, { system: [] })
   assert.equal((await readFile(path.join(user, "CURRENT_MODEL"), "utf8")).trim(), "tiel")
-  const before = (await stat(path.join(user, "CURRENT_MODEL"))).mtimeNs
+  assert.equal((await readFile(path.join(user, `CURRENT_MODEL.${process.pid}`), "utf8")).trim(), "tiel", "a per-process file for the rules server")
+  const before = (await stat(path.join(user, "CURRENT_MODEL"), { bigint: true })).mtimeNs
+  assert.equal(typeof before, "bigint")
+  await new Promise((r) => setTimeout(r, 20))
   await hook({ model: { id: "tiel-coder" } }, { system: [] })
-  assert.equal((await stat(path.join(user, "CURRENT_MODEL"))).mtimeNs, before)
+  assert.equal((await stat(path.join(user, "CURRENT_MODEL"), { bigint: true })).mtimeNs, before)
   await hook({ model: { id: "sage" } }, { system: [] })
   assert.equal((await readFile(path.join(user, "CURRENT_MODEL"), "utf8")).trim(), "sage")
+  assert.equal((await readFile(path.join(user, `CURRENT_MODEL.${process.pid}`), "utf8")).trim(), "sage")
   await rm(user, { recursive: true, force: true })
 })

@@ -78,16 +78,21 @@ export async function personalLayerDir(modelDir: string): Promise<string> {
   }
 }
 
-// <userHarnessDir>/CURRENT_MODEL holds the model key of the running session, so the rules server (mcp/rules.py) files a rule under
-// the model that is actually answering. Written only when it changes (one tiny file, no write per request); errors are ignored.
+// <userHarnessDir>/CURRENT_MODEL.<pid> (this engine process) and CURRENT_MODEL (shared, the last request of any window) hold the model
+// key of the running session, so the rules server (mcp/rules.py, a child of this process) files a rule under the model that is
+// actually answering. Written only when the key changes (no write per request: the SSD matters); errors are ignored.
+const lastModelWritten = new Map<string, string>()
 export async function rememberCurrentModel(userDir: string, key: string): Promise<void> {
-  const file = path.join(userDir, "CURRENT_MODEL")
+  if (lastModelWritten.get(userDir) === key) return
   try {
-    if ((await readFile(file, "utf8").catch(() => "")).trim() === key) return
     await mkdir(userDir, { recursive: true, mode: 0o700 })
-    const tmp = `${file}.${process.pid}.tmp`
-    await writeFile(tmp, key + "\n", { mode: 0o600 })
-    await rename(tmp, file)
+    for (const file of [path.join(userDir, `CURRENT_MODEL.${process.pid}`), path.join(userDir, "CURRENT_MODEL")]) {
+      if ((await readFile(file, "utf8").catch(() => "")).trim() === key) continue
+      const tmp = `${file}.${process.pid}.tmp`
+      await writeFile(tmp, key + "\n", { mode: 0o600 })
+      await rename(tmp, file)
+    }
+    lastModelWritten.set(userDir, key)
   } catch {
     /* the layer is optional: a read-only home must not break the request */
   }
