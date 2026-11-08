@@ -359,7 +359,8 @@ class Rules:
                 self._journal(actor, "rule_declined_lifted", f"{key} was declined; re-queued by /rule with: {text}")
             r["notes"].pop("flagged", None)
             r["notes"].update(notes)
-            r["notes"].pop("declined", None)
+            for stale in ("declined", "gate", "gate_rejected", "gate_skipped", "rolled_back"):
+                r["notes"].pop(stale, None)
             self.db.execute("UPDATE rule SET text=?, kind=?, status='queued', born_from='user_command', notes=? WHERE id=?",
                             (text, kind, json.dumps(r["notes"], ensure_ascii=False), r["id"]))
             self._add_case(r["id"], why)
@@ -484,7 +485,7 @@ class Rules:
                 if r["notes"].get("flagged") and not force:
                     raise RuleError(f"rule '{key}' reads like an instruction to the model (flagged); read it and use --force if it is really yours")
                 replaced = set(r["notes"].get("merged_from") or [])
-                enabled = [x for x in self._rows("status='enabled'") if x["notes"]["model"] == model and x["notes"]["key"] not in replaced]
+                enabled = [x for x in self._rows("status='enabled'") if x["notes"]["model"] == model and x["notes"]["key"] not in replaced and x["id"] != r["id"]]
                 if len(enabled) >= MAX_ENABLED and r["status"] != "enabled":
                     raise RuleError(f"{MAX_ENABLED} rules are already enabled for {model}; retire or merge one first (§4.7)")
                 tokens = est_tokens(self._render_rows(enabled + [r]))
@@ -492,20 +493,24 @@ class Rules:
                     raise RuleError(f"the layer of {model} would be ~{tokens} tokens, over the budget of {TOKEN_BUDGET} (§4.7); merge or retire a rule first")
                 ts = now_iso()
                 r["notes"].pop("rolled_back", None)
-                self.db.execute("UPDATE rule SET status='enabled', enabled_at=?, retired_at=NULL, notes=? WHERE id=?", (ts, json.dumps(r["notes"], ensure_ascii=False), r["id"]))
+                self.db.execute("UPDATE rule SET status='enabled', enabled_at=COALESCE(enabled_at, ?), retired_at=NULL, notes=? WHERE id=?",
+                                (ts, json.dumps(r["notes"], ensure_ascii=False), r["id"]))
                 for x in self._rows("status IN ('enabled','passed','queued','testing','candidate')"):
                     if x["notes"]["model"] == model and x["notes"]["key"] in replaced:
                         self.db.execute("UPDATE rule SET status='retired', retired_at=? WHERE id=?", (ts, x["id"]))
                         self._journal(actor, "rule_retired", f"{x['notes']['key']} replaced by {key}")
-                gate_run_id = (r["notes"].get("gate") or {}).get("run")
+                g = r["notes"].get("gate") or {}
+                gate_run_id = g.get("run") if g.get("decision") == "passed" else None
             else:
                 if r["status"] != "enabled":
                     raise RuleError(f"rule '{key}' is {r['status']}, not in the layer; use withdraw for a candidate")
                 self.db.execute("UPDATE rule SET status='retired', retired_at=? WHERE id=?", (now_iso(), r["id"]))
                 gate_run_id = None
             self._journal(actor, f"rule_{status}", key)
-            version, text = self._new_version(model, f"{status} {key}", actor, gate_run_id)
+            version, text, exp = self._new_version(model, f"{status} {key}", actor, gate_run_id)
         self._write_version(model, version, text)
+        if exp:
+            self.experience(model, exp)
         self.render(model)
         return f"Rule '{key}' is {status}; version {version:03d} of the personal layer of {model} is live.\n{r['text']}"
 
@@ -536,20 +541,19 @@ class Rules:
     def _new_version(self, model, reason, actor="user", gate_run_id=None):
         """Inside a transaction: snapshot the enabled rules of `model` as the next version and make it current (the files are written by
         the caller after COMMIT, so CURRENT never names a version the database does not have). The same set of rules as the current
-        version makes no new version. Returns (number, text)."""
+        version makes no new version. Returns (number, text, experience line or None); the caller writes files and EXPERIENCE after COMMIT."""
         enabled = [r for r in self._rows("status='enabled'") if r["notes"]["model"] == model]
         ids = sorted(r["id"] for r in enabled)
         text = self._render_rows(enabled)
         cur = self.db.execute("SELECT number, rule_ids FROM rule_version WHERE model=? AND is_current=1", (model,)).fetchone()
         if cur is not None and sorted(json.loads(cur["rule_ids"] or "[]")) == ids:
-            return cur["number"], text
+            return cur["number"], text, None
         number = (self.db.execute("SELECT MAX(number) FROM rule_version WHERE model=?", (model,)).fetchone()[0] or 0) + 1
         self.db.execute("UPDATE rule_version SET is_current=0 WHERE model=?", (model,))
         self.db.execute("INSERT INTO rule_version(model, number, rendered_harness, rule_ids, created_at, gate_run_id, is_current) VALUES (?,?,?,?,?,?,1)",
                         (model, number, text, json.dumps(ids), now_iso(), gate_run_id))
         self._journal(actor, "version_current", f"{model} {number:03d}: {reason}")
-        self.experience(model, f"version {number:03d} live ({reason}); {len(enabled)} rules, ~{est_tokens(text)} tokens")
-        return number, text
+        return number, text, f"version {number:03d} live ({reason}); {len(enabled)} rules, ~{est_tokens(text)} tokens"
 
     def _write_version(self, model, number, text):
         folder = self.skills_dir / model / "versions" / f"{number:03d}"
@@ -570,6 +574,8 @@ class Rules:
             if cur is None:
                 raise RuleError(f"no version of the personal layer of {model} yet")
             target_no = int(to) if to is not None else cur["number"] - 1
+            if target_no == cur["number"]:
+                raise RuleError(f"version {target_no:03d} is the live one already")
             target = self.db.execute("SELECT * FROM rule_version WHERE model=? AND number=?", (model, target_no)).fetchone()
             if target is None:
                 raise RuleError(f"no version {target_no:03d} of {model} (versions: 1..{cur['number']})")
@@ -588,8 +594,8 @@ class Rules:
             self.db.execute("UPDATE rule_version SET is_current=0 WHERE model=?", (model,))
             self.db.execute("UPDATE rule_version SET is_current=1 WHERE id=?", (target["id"],))
             self._journal(actor, "version_rollback", f"{model} {cur['number']:03d} -> {target_no:03d}")
-            self.experience(model, f"rollback {cur['number']:03d} -> {target_no:03d}")
         self._write_version(model, target_no, target["rendered_harness"] or "")
+        self.experience(model, f"rollback {cur['number']:03d} -> {target_no:03d}")
         self.render(model)
         return f"The personal layer of {model} is back at version {target_no:03d} ({len(ids)} rules); {cur['number']:03d} stays in versions/ for a roll forward."
 

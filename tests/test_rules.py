@@ -448,6 +448,24 @@ class SecondReviewLL4b(RulesCase):
         self.rules.db.execute("UPDATE rule SET notes=? WHERE id=?", (json.dumps(r["notes"]), r["id"]))
         self.assertIn("ablation: run 5 no_benefit", self.rules.show("u"))
 
+    def test_a_requeued_rule_drops_its_old_gate_marks_and_a_forced_re_enable_counts_it_once(self):
+        self.rules.propose("p", "w", "d", "y")
+        r = self.rules._get("p", "tiel")
+        r["notes"].update(gate={"run": 3, "decision": "rejected", "delta": -0.1, "ci_low": -0.2, "time_ratio": 1, "tokens_ratio": 1}, gate_rejected=True,
+                          gate_skipped={"reason": "old"})
+        self.rules.db.execute("UPDATE rule SET status='rejected', notes=? WHERE id=?", (json.dumps(r["notes"]), r["id"]))
+        self.rules.propose("p", "w", "d", "y")
+        shown = self.rules.show("p")
+        self.assertNotIn("gate:", shown)
+        self.assertNotIn("gate skipped", shown)
+        self.rules.set_status("p", "enabled")
+        self.assertIsNone(self.rules.versions("tiel")[0]["gate_run_id"], "a version is linked only to a passed gate run")
+        before = self.rules._get("p", "tiel")["enabled_at"]
+        self.rules.set_status("p", "enabled", force=True)
+        self.assertEqual(self.rules._get("p", "tiel")["enabled_at"], before)
+        with self.assertRaises(R.RuleError):
+            self.rules.rollback("tiel", to=1)
+
     def test_the_cli_versions_rollback_and_merge(self):
         import io
         from contextlib import redirect_stdout
