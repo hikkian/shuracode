@@ -13,7 +13,10 @@ never writes a rule into the prompt by itself:
 * enabling a rule (after the gate, or by the person's own word in the terminal) renders the model's personal layer
   `~/.local/share/shura/skills/<model>/harness.md`, which plugin/model-harness.ts adds after the base harness.
 
-Storage: the same SQLite file as the memory (gateway/lifelong_store.py of Shura, tables `rule`, `rule_version`, `journal` with the same
+LL4b: every enable/retire/rollback is a numbered snapshot of the layer (<skills>/<model>/versions/NNN/harness.md, CURRENT points at
+the live one, a row in rule_version), the layer is limited to 12 rules and ~600 tokens, a merged rule replaces its sources when it is
+enabled, `rollback` moves CURRENT back by one command, EXPERIENCE.md keeps the story, and a rule that passed the night check carries
+a notice until the person decides. Storage: the same SQLite file as the memory (gateway/lifelong_store.py of Shura, tables `rule`, `rule_version`, `journal` with the same
 DDL, plus `rule_case`); the file is created here with the same definitions when Shura's module is not around. Standard library only.
 Versions, rollback and the prompt limits of §4.7 are LL4b; the gate runner is LL5.
 """
@@ -40,7 +43,9 @@ STATUSES = ("candidate", "queued", "testing", "passed", "enabled", "rejected", "
 KINDS = ("rule", "procedure")
 MAX_WHEN_WORDS, MAX_DO_WORDS, MAX_RULE_WORDS = 25, 40, 60
 MAX_WHY_CHARS = 200
-MAX_ENABLED = 12            # §4.7: always-on rules per model (the token budget is checked by the gate, LL4b/LL5)
+MAX_ENABLED = 12            # §4.7: always-on rules per model
+TOKEN_BUDGET = 600          # §4.7: the rendered personal layer, in tokens (estimated: characters / 3.5, mixed Russian and English)
+CHARS_PER_TOKEN = 3.5
 # the same escaping as Shura's knowledge store (gateway/lifelong_store.py): template markers never reach a prompt raw
 CONTROL_TOKENS = ["<|im_start|>", "<|im_end|>", "<|endoftext|>", "<|start_header_id|>", "<|end_header_id|>", "<|eot_id|>",
                   "<start_of_turn>", "<end_of_turn>", "<tool_call>", "</tool_call>", "<tool_response>", "</tool_response>",
@@ -105,6 +110,17 @@ TOOLS = [
     {"name": "rule_show",
      "description": "Show one rule in full: its RULE form, cases, status history.",
      "inputSchema": {"type": "object", "properties": {"key": {"type": "string"}}, "required": ["key"]}},
+    {"name": "rule_merge",
+     "description": "Propose ONE rule that replaces two or more existing rules (when the layer is full or two rules overlap). The merged "
+                    "text is queued for the night check like any candidate; when the person enables it, the source rules retire.",
+     "inputSchema": {"type": "object", "properties": {
+         "key": {"type": "string"}, "sources": {"type": "array", "items": {"type": "string"}, "description": "keys of the rules it replaces"},
+         "when": {"type": "string"}, "do": {"type": "string"}, "why": {"type": "string"}, "model": {"type": "string", "enum": list(MODELS)}},
+         "required": ["key", "sources", "when", "do", "why"]}},
+    {"name": "rule_versions",
+     "description": "List the versions of the personal layer (number, date, rules, which one is live). Read-only: rollback is the person's "
+                    "terminal command.",
+     "inputSchema": {"type": "object", "properties": {"model": {"type": "string", "enum": list(MODELS)}}}},
     {"name": "rule_withdraw",
      "description": "The person declined this rule ('no, don't'): mark it rejected so it is not proposed again. For a proposal that was "
                     "never recorded, pass when/do/why too so the refusal is remembered.",
@@ -157,11 +173,20 @@ def rule_text(when, do):
     return text
 
 
+def est_tokens(text):
+    return int(len(text) / CHARS_PER_TOKEN + 0.999)
+
+
 def rule_form(r):
     n = r["notes"]
     flag = "\nflag: instruction-like (reads like an instruction to the model; the person must look at it)" if n.get("flagged") else ""
+    merged = f"\nreplaces: {', '.join(n['merged_from'])}" if n.get("merged_from") else ""
+    gate = ""
+    if n.get("gate"):
+        g = n["gate"]
+        gate = f"\ngate: run {g.get('run')} {g.get('decision')}: score {g.get('delta')} (lower {g.get('ci_low')}), time x{g.get('time_ratio')}, tokens x{g.get('tokens_ratio')}"
     return (f"RULE {n['key']} [{r['status']}]\nwhen: {n['when']}\ndo: {n['do']}\nwhy: {n['why']}\nborn_from: {r['born_from']}\n"
-            f"cost: {n['cost_words']} words\nmodel: {n['model']}, kind: {r['kind']}, cases: {len(r['cases'])}{flag}")
+            f"cost: {n['cost_words']} words\nmodel: {n['model']}, kind: {r['kind']}, cases: {len(r['cases'])}{flag}{merged}{gate}")
 
 
 class Rules:
@@ -331,6 +356,26 @@ class Rules:
             self._journal(actor, "rule_queued", f"{key} by /rule (was {r['status']})")
             return f"Rule '{key}' is queued for the night check (it was {r['status']}; cost {notes['cost_words']} words)."
 
+    def merge(self, key, sources, when, do, why, model=None, actor="user"):
+        """One rule for several (§4.7): queued like any candidate; the sources retire when the merged rule is enabled."""
+        if not isinstance(sources, (list, tuple)) or len(sources) < 2:
+            raise RuleError("sources must list at least two rule keys")
+        key, text, notes, model, kind = self._validate(key, when, do, why, model, None)
+        with Tx(self.db):
+            srcs = []
+            for sk in sources:
+                r = self._get(slug(sk), model)
+                if r is None or r["status"] not in ("enabled", "passed", "queued"):
+                    raise RuleError(f"source '{slug(sk)}' must be an enabled, passed or queued rule of {model}")
+                srcs.append(r["notes"]["key"])
+            if key in srcs or self._get(key, model) is not None:
+                raise RuleError(f"'{key}' exists; a merged rule needs a new key")
+            notes["merged_from"] = srcs
+            rid = self._insert(text, kind, "queued", "merge:" + ",".join(srcs), notes)
+            self._add_case(rid, why)
+            self._journal(actor, "rule_queued", f"{key} merge of {', '.join(srcs)}")
+        return f"Merged rule '{key}' is queued for the night check; when the person enables it, {', '.join(srcs)} retire (cost {notes['cost_words']} words)."
+
     def withdraw(self, key, when=None, do=None, why=None, model=None, actor="user"):
         """The person said no. A proposal that was never recorded is recorded as rejected (with its text when given), so the same
         key is not proposed again. The model (actor shura) may withdraw only candidates and queued rules it could have created."""
@@ -362,6 +407,17 @@ class Rules:
             self._journal(actor, "rule_declined", key)
         return f"Rule '{key}' is withdrawn (rejected by the person); it will not be proposed again."
 
+    def notices(self, model=None):
+        """Rules that passed the night check and wait for the person's word (DESIGN §11 p. 1): shown until enabled or retired."""
+        out = []
+        for r in self._rows("status='passed'"):
+            if model and r["notes"]["model"] != model:
+                continue
+            g = r["notes"].get("gate") or {}
+            out.append(f"Notice: rule '{r['notes']['key']}' ({r['notes']['model']}) passed the night check"
+                       f"{' (run ' + str(g['run']) + ', score ' + str(g.get('delta')) + ')' if g else ''}: the person can enable it in the terminal.")
+        return out
+
     def list(self, status=None, model=None):
         rows = self._rows()
         if status:
@@ -372,7 +428,7 @@ class Rules:
             rows = [r for r in rows if r["notes"]["model"] == model]
         if not rows:
             return "No rules yet." if not (status or model) else "No rules match."
-        lines = []
+        lines = self.notices(model) if not status else []
         for r in rows:
             n = r["notes"]
             flag = " !instruction-like" if n.get("flagged") else ""
@@ -407,30 +463,130 @@ class Rules:
                     raise RuleError(f"rule '{key}' is {r['status']}, not queued or passed; --force enables it anyway")
                 if r["notes"].get("flagged") and not force:
                     raise RuleError(f"rule '{key}' reads like an instruction to the model (flagged); read it and use --force if it is really yours")
-                enabled = [x for x in self._rows("status='enabled'") if x["notes"]["model"] == model]
+                replaced = set(r["notes"].get("merged_from") or [])
+                enabled = [x for x in self._rows("status='enabled'") if x["notes"]["model"] == model and x["notes"]["key"] not in replaced]
                 if len(enabled) >= MAX_ENABLED and r["status"] != "enabled":
                     raise RuleError(f"{MAX_ENABLED} rules are already enabled for {model}; retire or merge one first (§4.7)")
-                self.db.execute("UPDATE rule SET status='enabled', enabled_at=?, retired_at=NULL WHERE id=?", (now_iso(), r["id"]))
+                tokens = est_tokens(self._render_rows(enabled + [r]))
+                if tokens > TOKEN_BUDGET:
+                    raise RuleError(f"the layer of {model} would be ~{tokens} tokens, over the budget of {TOKEN_BUDGET} (§4.7); merge or retire a rule first")
+                ts = now_iso()
+                self.db.execute("UPDATE rule SET status='enabled', enabled_at=?, retired_at=NULL WHERE id=?", (ts, r["id"]))
+                for x in self._rows("status='enabled'"):
+                    if x["notes"]["model"] == model and x["notes"]["key"] in replaced:
+                        self.db.execute("UPDATE rule SET status='retired', retired_at=? WHERE id=?", (ts, x["id"]))
+                        self._journal(actor, "rule_retired", f"{x['notes']['key']} replaced by {key}")
             else:
                 self.db.execute("UPDATE rule SET status='retired', retired_at=? WHERE id=?", (now_iso(), r["id"]))
             self._journal(actor, f"rule_{status}", key)
+            version = self._new_version(model, f"{status} {key}", actor)
         self.render(model)
-        return f"Rule '{key}' is {status}; the personal layer of {model} is rendered.\n{r['text']}"
+        return f"Rule '{key}' is {status}; version {version:03d} of the personal layer of {model} is live.\n{r['text']}"
 
-    def render_text(self, model):
-        rows = sorted((r for r in self._rows("status='enabled'") if r["notes"]["model"] == model), key=lambda r: r["enabled_at"] or "")
+    @staticmethod
+    def _render_rows(rows):
+        rows = sorted(rows, key=lambda r: (r["enabled_at"] or "", r["id"]))
         if not rows:
             return ""
         lines = ["Personal rules of this model, confirmed by the person and passed the check (they add to the base above, never replace it):"]
         lines += [f"- {escape_control(' '.join(str(r['text']).split()))}" for r in rows]
         return "\n".join(lines) + "\n"
 
+    def render_text(self, model):
+        return self._render_rows([r for r in self._rows("status='enabled'") if r["notes"]["model"] == model])
+
+    # ---- versions (LL4b): numbered snapshots, CURRENT, rollback, EXPERIENCE.md ------------------------------------------------
+    def versions(self, model=None):
+        model = self._model(model)
+        rows = self.db.execute("SELECT * FROM rule_version WHERE model=? ORDER BY number", (model,)).fetchall()
+        out = []
+        for v in rows:
+            ids = json.loads(v["rule_ids"] or "[]")
+            keys = [r["notes"]["key"] for r in self._rows() if r["id"] in ids]
+            out.append({"number": v["number"], "created_at": v["created_at"], "rules": keys, "current": bool(v["is_current"]),
+                        "gate_run_id": v["gate_run_id"], "tokens": est_tokens(v["rendered_harness"] or "")})
+        return out
+
+    def _new_version(self, model, reason, actor="user", gate_run_id=None):
+        """Inside a transaction: snapshot the enabled rules of `model` as the next version, make it current and write it to disk."""
+        enabled = [r for r in self._rows("status='enabled'") if r["notes"]["model"] == model]
+        text = self._render_rows(enabled)
+        number = (self.db.execute("SELECT MAX(number) FROM rule_version WHERE model=?", (model,)).fetchone()[0] or 0) + 1
+        self.db.execute("UPDATE rule_version SET is_current=0 WHERE model=?", (model,))
+        self.db.execute("INSERT INTO rule_version(model, number, rendered_harness, rule_ids, created_at, gate_run_id, is_current) VALUES (?,?,?,?,?,?,1)",
+                        (model, number, text, json.dumps([r["id"] for r in enabled]), now_iso(), gate_run_id))
+        self._journal(actor, "version_current", f"{model} {number:03d}: {reason}")
+        self._write_version(model, number, text)
+        self.experience(model, f"version {number:03d} live ({reason}); {len(enabled)} rules, ~{est_tokens(text)} tokens")
+        return number
+
+    def _write_version(self, model, number, text):
+        folder = self.skills_dir / model / "versions" / f"{number:03d}"
+        folder.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(self.skills_dir / model, 0o700)
+        except OSError:
+            pass
+        self._write_private(folder / "harness.md", text)
+        self._write_private(self.skills_dir / model / "CURRENT", f"{number:03d}\n")
+
+    def rollback(self, model=None, to=None, actor="user"):
+        """One command back: CURRENT moves to the previous version (or `to`), the rules take that version's statuses (enabled there ->
+        enabled; enabled now but not there -> passed, i.e. approved but not in the layer). Journaled; nothing is deleted."""
+        model = self._model(model)
+        with Tx(self.db):
+            cur = self.db.execute("SELECT * FROM rule_version WHERE model=? AND is_current=1", (model,)).fetchone()
+            if cur is None:
+                raise RuleError(f"no version of the personal layer of {model} yet")
+            target_no = int(to) if to is not None else cur["number"] - 1
+            target = self.db.execute("SELECT * FROM rule_version WHERE model=? AND number=?", (model, target_no)).fetchone()
+            if target is None:
+                raise RuleError(f"no version {target_no:03d} of {model} (versions: 1..{cur['number']})")
+            ids = set(json.loads(target["rule_ids"] or "[]"))
+            ts = now_iso()
+            for r in self._rows():
+                if r["notes"]["model"] != model:
+                    continue
+                if r["id"] in ids and r["status"] != "enabled":
+                    self.db.execute("UPDATE rule SET status='enabled', enabled_at=COALESCE(enabled_at, ?), retired_at=NULL WHERE id=?", (ts, r["id"]))
+                elif r["id"] not in ids and r["status"] == "enabled":
+                    self.db.execute("UPDATE rule SET status='passed' WHERE id=?", (r["id"],))
+            self.db.execute("UPDATE rule_version SET is_current=0 WHERE model=?", (model,))
+            self.db.execute("UPDATE rule_version SET is_current=1 WHERE id=?", (target["id"],))
+            self._journal(actor, "version_rollback", f"{model} {cur['number']:03d} -> {target_no:03d}")
+            self._write_version(model, target_no, target["rendered_harness"] or "")
+            self.experience(model, f"rollback {cur['number']:03d} -> {target_no:03d}")
+        self.render(model)
+        return f"The personal layer of {model} is back at version {target_no:03d} ({len(ids)} rules); {cur['number']:03d} stays in versions/ for a roll forward."
+
+    def experience(self, model, line):
+        """EXPERIENCE.md of the personal layer: one dated line per event (what was tried, what passed, what was rolled back)."""
+        folder = self.skills_dir / model
+        folder.mkdir(parents=True, exist_ok=True)
+        with open(folder / "EXPERIENCE.md", "a", encoding="utf-8") as f:
+            if f.tell() == 0:
+                f.write(f"# Personal layer of {model}: what happened and why\n\n")
+            f.write(f"- {now_iso()[:19]} {line}\n")
+        try:
+            os.chmod(folder / "EXPERIENCE.md", 0o600)
+        except OSError:
+            pass
+
+    @staticmethod
+    def _write_private(path, text):
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(text, encoding="utf-8")
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+
     def render(self, model):
-        """Write <skills_dir>/<model>/harness.md (only when it changed) and make sure skills/ exists."""
+        """Write <skills_dir>/<model>/harness.md (only when it changed) and make sure skills/ exists. The file mirrors the current version
+        (the plugin reads versions/<CURRENT>/harness.md when CURRENT exists, this file otherwise)."""
         model = self._model(model)
         folder = self.skills_dir / model
         (folder / "skills").mkdir(parents=True, exist_ok=True)
-        text = self.render_text(model)
+        cur = self.db.execute("SELECT rendered_harness FROM rule_version WHERE model=? AND is_current=1", (model,)).fetchone()
+        text = cur["rendered_harness"] if cur is not None else self.render_text(model)
         target = folder / "harness.md"
         if target.exists() and target.read_text(encoding="utf-8") == text:
             return target
@@ -445,7 +601,15 @@ class Rules:
         by = {}
         for r in rows:
             by[r["status"]] = by.get(r["status"], 0) + 1
-        return {"rules": len(rows), "by_status": by, "db": str(self.path), "skills_dir": str(self.skills_dir), "session": self.session}
+        current = {v["model"]: v["number"] for v in self.db.execute("SELECT model, number FROM rule_version WHERE is_current=1")}
+        return {"rules": len(rows), "by_status": by, "db": str(self.path), "skills_dir": str(self.skills_dir), "session": self.session,
+                "current_version": current, "notices": self.notices()}
+
+    def versions_text(self, model=None):
+        vs = self.versions(model)
+        if not vs:
+            return f"No versions of the personal layer of {self._model(model)} yet."
+        return "\n".join(f"- {v['number']:03d}{' (live)' if v['current'] else ''} {v['created_at'][:10]}: {', '.join(v['rules']) or '(empty)'} (~{v['tokens']} tokens)" for v in vs)
 
     def close(self):
         self.db.close()
@@ -484,7 +648,8 @@ def handle(rules, msg):
     if method == "tools/call":
         params = msg.get("params", {})
         tool, args = params.get("name"), params.get("arguments") or {}
-        fns = {"rule_case": rules.case, "rule_propose": rules.propose, "rule_list": rules.list, "rule_show": rules.show, "rule_withdraw": rules.withdraw}
+        fns = {"rule_case": rules.case, "rule_propose": rules.propose, "rule_list": rules.list, "rule_show": rules.show, "rule_withdraw": rules.withdraw,
+               "rule_merge": rules.merge, "rule_versions": rules.versions_text}
         schema = next((t for t in TOOLS if t["name"] == tool), None)
         if schema is None or tool not in fns:
             return {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": f"unknown tool: {tool}"}], "isError": True}}
@@ -493,7 +658,7 @@ def handle(rules, msg):
                 raise TypeError("arguments must be an object")
             allowed = schema["inputSchema"]["properties"]
             args = {k: v for k, v in args.items() if k in allowed}    # the model cannot pass actor or anything outside the schema
-            if tool in ("rule_case", "rule_propose", "rule_withdraw"):
+            if tool in ("rule_case", "rule_propose", "rule_withdraw", "rule_merge"):
                 args["actor"] = "shura"                                 # the journal says who really called: the model, not the person
             text, error = fns[tool](**args), False
         except TypeError as e:
@@ -541,6 +706,10 @@ def main(argv=None):
     s = sub.add_parser("disable"); s.add_argument("key"); s.add_argument("--model")
     s = sub.add_parser("withdraw"); s.add_argument("key"); s.add_argument("--model")
     s = sub.add_parser("render"); s.add_argument("model", nargs="?", default=None)
+    s = sub.add_parser("versions"); s.add_argument("--model")
+    s = sub.add_parser("rollback", help="one step back (or --to N); the rules take that version's statuses"); s.add_argument("--model"); s.add_argument("--to", type=int)
+    s = sub.add_parser("merge", help="one rule for several: queued for the night check"); s.add_argument("key"); s.add_argument("--sources", required=True, help="comma list")
+    s.add_argument("--when", required=True); s.add_argument("--do", required=True); s.add_argument("--why", required=True); s.add_argument("--model")
     sub.add_parser("status")
     sub.add_parser("serve")
     a = ap.parse_args(argv)
@@ -576,6 +745,12 @@ def main(argv=None):
             print(rules.withdraw(a.key, model=a.model))
         elif a.cmd == "render":
             print(f"rendered {rules.render(a.model or rules.current_model())}")
+        elif a.cmd == "versions":
+            print(rules.versions_text(a.model))
+        elif a.cmd == "rollback":
+            print(rules.rollback(a.model, a.to))
+        elif a.cmd == "merge":
+            print(rules.merge(a.key, [x for x in a.sources.split(",") if x], a.when, a.do, a.why, a.model))
         else:
             print(json.dumps(rules.status(), ensure_ascii=False, indent=1))
         return 0

@@ -171,6 +171,13 @@ the base harness of the model: the personal layer can add to the base, never rep
 what is enabled; `python3 mcp/rules.py enable|disable <key>` is the person's switch in the terminal (it prints the rule and asks; a queued or passed rule only, `--force` for the rest). The model is asked before it may run that script. The rules live in
 the same local database as the memory; nothing leaves the machine.
 
+Every enable or retire is a numbered version of the layer (`versions/NNN/harness.md`, `CURRENT` points at the live one);
+`python3 mcp/rules.py rollback` is one step back, `versions` lists them, `EXPERIENCE.md` in the layer's folder keeps the
+story. The layer holds at most 12 rules and about 600 tokens: beyond that a rule enters only by merging two into one
+(`/rules merge`), which goes through the night check too. The night check itself (`rsi.driver ... lifelong` in the Shura
+repository) measures one candidate against the current layer on your own control tasks and marks it passed or rejected;
+a passed rule shows as a notice in `/rules` until you decide.
+
 ## Build and Plan
 
 | Mode | Files | Shell |

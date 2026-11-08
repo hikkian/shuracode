@@ -59,3 +59,6 @@ normally after the night check against their own tasks. Tools: rule_case, rule_p
   is not in force until the person enables it.
 - A fact or a preference is a memory (memory_save), not a rule; a rule says how to act. When unsure, save the memory and
   mention that it could become a rule after a second case.
+- The layer holds at most 12 rules and about 600 tokens. When rule_list shows it is full or two rules overlap, propose one
+  merged rule (rule_merge) instead of a new one; it goes through the night check like any candidate. A "Notice:" line in
+  rule_list means a rule passed the check: tell the person once, they enable it in the terminal.

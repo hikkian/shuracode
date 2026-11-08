@@ -294,6 +294,101 @@ class ReviewFindings(RulesCase):
             self.assertEqual(ours[t], theirs[t], t)
 
 
+class Versions(RulesCase):
+    """LL4b: every switch is a numbered snapshot; CURRENT points at the live one; rollback is one command; the budget holds."""
+
+    def test_enable_and_retire_make_numbered_versions_and_current_points_at_the_live_one(self):
+        self.rules.propose("a", "a task says done", "run the tests", "why a")
+        self.rules.propose("b", "editing Go", "use tabs", "why b")
+        msg = self.rules.set_status("a", "enabled")
+        self.assertIn("version 001", msg)
+        self.rules.set_status("b", "enabled")
+        tiel = self.skills / "tiel"
+        self.assertEqual((tiel / "CURRENT").read_text().strip(), "002")
+        self.assertIn("use tabs", (tiel / "versions" / "002" / "harness.md").read_text())
+        self.assertNotIn("use tabs", (tiel / "versions" / "001" / "harness.md").read_text())
+        self.assertEqual((tiel / "harness.md").read_text(), (tiel / "versions" / "002" / "harness.md").read_text(), "the plain file mirrors the live version")
+        vs = self.rules.versions("tiel")
+        self.assertEqual([(v["number"], v["current"], v["rules"]) for v in vs], [(1, False, ["a"]), (2, True, ["a", "b"])])
+        self.assertIn("002 (live)", self.rules.versions_text("tiel"))
+        self.assertIn("version 002 live", (tiel / "EXPERIENCE.md").read_text())
+        self.assertEqual(oct(os.stat(tiel / "EXPERIENCE.md").st_mode & 0o777), "0o600")
+
+    def test_rollback_moves_current_back_and_restores_the_rule_statuses(self):
+        self.rules.propose("a", "x", "y", "z")
+        self.rules.propose("b", "p", "q", "r")
+        self.rules.set_status("a", "enabled")
+        self.rules.set_status("b", "enabled")
+        msg = self.rules.rollback("tiel")
+        self.assertIn("back at version 001", msg)
+        self.assertEqual((self.skills / "tiel" / "CURRENT").read_text().strip(), "001")
+        self.assertNotIn("When p: q.", (self.skills / "tiel" / "harness.md").read_text())
+        self.assertIn("b [passed]", self.rules.list(), "a rule taken out by the rollback is approved but not in the layer")
+        self.assertIn("a [enabled]", self.rules.list())
+        self.assertIn("rollback 002 -> 001", (self.skills / "tiel" / "EXPERIENCE.md").read_text())
+        self.assertIn("back at version 002", self.rules.rollback("tiel", to=2), "a roll forward is a rollback to a later number")
+        self.assertIn("b [enabled]", self.rules.list())
+        with self.assertRaises(R.RuleError):
+            self.rules.rollback("tiel", to=9)
+        with self.assertRaises(R.RuleError):
+            self.rules.rollback("sage")
+
+    def test_the_token_budget_of_the_layer_holds(self):
+        long_do = " ".join(["verification"] * 36)       # 22 + 36 words, under the 60-word form limit, ~130 tokens per rule
+        enabled = 0
+        for i in range(R.MAX_ENABLED):
+            self.rules.propose(f"r{i}", " ".join([f"situation{i}"] * 22), long_do, "why")
+            try:
+                self.rules.set_status(f"r{i}", "enabled")
+                enabled += 1
+            except R.RuleError as e:
+                self.assertIn("budget", str(e.exception) if hasattr(e, "exception") else str(e))
+                break
+        else:
+            self.fail("twelve long rules fit under 600 tokens: the budget does not hold")
+        self.assertGreaterEqual(enabled, 2, "a couple of long rules still fit")
+        self.assertLessEqual(R.est_tokens((self.skills / "tiel" / "harness.md").read_text()), R.TOKEN_BUDGET)
+
+    def test_a_merged_rule_replaces_its_sources_when_enabled(self):
+        self.rules.propose("a", "a task says done", "run the tests", "why a")
+        self.rules.propose("b", "a task says done", "show the test output", "why b")
+        self.rules.set_status("a", "enabled")
+        self.rules.set_status("b", "enabled")
+        msg = self.rules.merge("ab", ["a", "b"], "a task says done", "run the tests and show the output", "both said so")
+        self.assertIn("queued", msg)
+        self.assertIn("replaces: a, b", self.rules.show("ab"))
+        with self.assertRaises(R.RuleError):
+            self.rules.merge("a", ["a", "b"], "w", "d", "y")
+        with self.assertRaises(R.RuleError):
+            self.rules.merge("c", ["a"], "w", "d", "y")
+        self.rules.set_status("ab", "enabled")
+        listing = self.rules.list()
+        self.assertIn("ab [enabled]", listing)
+        self.assertIn("a [retired]", listing)
+        self.assertIn("b [retired]", listing)
+        layer = (self.skills / "tiel" / "harness.md").read_text()
+        self.assertEqual(layer.count("- When"), 1)
+
+    def test_a_passed_rule_carries_a_notice_until_the_person_decides(self):
+        self.rules.propose("p", "w", "d", "y")
+        r = self.rules._get("p", "tiel")
+        r["notes"]["gate"] = {"run": 7, "decision": "passed", "delta": 0.12, "ci_low": 0.03, "time_ratio": 1.02, "tokens_ratio": 1.01}
+        self.rules.db.execute("UPDATE rule SET status='passed', notes=? WHERE id=?", (json.dumps(r["notes"]), r["id"]))
+        self.assertTrue(self.rules.list().startswith("Notice: rule 'p' (tiel) passed the night check (run 7, score 0.12)"))
+        self.assertIn("gate: run 7 passed", self.rules.show("p"))
+        self.assertEqual(len(self.rules.status()["notices"]), 1)
+        self.rules.set_status("p", "enabled")
+        self.assertFalse(self.rules.list().startswith("Notice"))
+
+    def test_the_plugin_reads_the_version_current_points_at(self):
+        """The plugin's personalLayerDir follows CURRENT -> versions/NNN (tests/user-harness.test.mjs); here the files are as it expects."""
+        self.rules.propose("a", "x", "y", "z")
+        self.rules.set_status("a", "enabled")
+        cur = (self.skills / "tiel" / "CURRENT").read_text().strip()
+        self.assertRegex(cur, r"^\d{3}$")
+        self.assertTrue((self.skills / "tiel" / "versions" / cur / "harness.md").is_file())
+
+
 class Protocol(unittest.TestCase):
     def test_stdio_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -314,7 +409,7 @@ class Protocol(unittest.TestCase):
             replies = {r["id"]: r for r in map(json.loads, out.splitlines())}
             self.assertEqual(sorted(replies), [1, 2, 3, 4, 5, 6, 7])
             self.assertEqual(replies[1]["result"]["serverInfo"]["name"], "shuracode-rules")
-            self.assertEqual([t["name"] for t in replies[2]["result"]["tools"]], ["rule_case", "rule_propose", "rule_list", "rule_show", "rule_withdraw"])
+            self.assertEqual([t["name"] for t in replies[2]["result"]["tools"]], ["rule_case", "rule_propose", "rule_list", "rule_show", "rule_merge", "rule_versions", "rule_withdraw"])
             self.assertFalse(replies[3]["result"]["isError"])
             self.assertIn("tests-first [candidate]", replies[4]["result"]["content"][0]["text"])
             self.assertTrue(replies[5]["result"]["isError"])
