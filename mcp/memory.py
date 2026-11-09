@@ -353,7 +353,13 @@ class SqlStore:
         self.store._write_index()
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+
 def make_store():
+    from lifelong_http import enabled, GatewayMemory
+    if enabled():
+        return GatewayMemory(MemoryError)
     if os.environ.get("SHURACODE_MEMORY_LEGACY") == "1":
         return Store()
     try:
@@ -385,12 +391,17 @@ def handle(store, msg):
     if method == "ping":
         return {"jsonrpc": "2.0", "id": mid, "result": {}}
     if method == "tools/list":
-        return {"jsonrpc": "2.0", "id": mid, "result": {"tools": TOOLS}}
+        from lifelong_http import GatewayMemory, management_tools
+        return {"jsonrpc": "2.0", "id": mid, "result": {"tools": TOOLS + (management_tools() if isinstance(store, GatewayMemory) else [])}}
     if method == "tools/call":
         params = msg.get("params", {})
         tool, args = params.get("name"), params.get("arguments") or {}
         try:
-            fn = {"save": store.save, "read": store.read, "search": store.search, "delete": store.delete}[tool]
+            functions = {"save": store.save, "read": store.read, "search": store.search, "delete": store.delete}
+            from lifelong_http import GatewayMemory
+            if isinstance(store, GatewayMemory):
+                functions.update({k: getattr(store, k) for k in ("fix", "forget", "restore", "stats", "export", "import_records")})
+            fn = functions[tool]
             text, error = fn(**args), False
         except KeyError:
             text, error = f"unknown tool: {tool}", True

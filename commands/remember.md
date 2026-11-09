@@ -1,7 +1,7 @@
 ---
 description: Save something to Shura's permanent memory
 ---
-Save this to your permanent memory with the memory_save tool: $ARGUMENTS
+The ShuraCode user-command hook has already performed explicit `/remember <text>` saves and `/remember confirm <key>` confirmations. Read the key back with memory_search and report its passport; do not repeat the write. `$ARGUMENTS`
 
 If nothing was given after /remember, save the most useful non-obvious thing learned in this conversation
 (a preference, a correction, or project knowledge that is not in the code). Check the memory index first:

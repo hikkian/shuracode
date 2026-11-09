@@ -121,8 +121,8 @@
    "id": "memory",
    "name": "/memory",
    "category": "Memory",
-   "en": "Show what Shura remembers, or export/import/stats/restore the memory",
-   "ru": "Показать, что помнит Shura; подкоманды export, import, stats, restore.",
+   "en": "Show memories with source/date/trust; export [file], import <file>, stats, restore <key>",
+   "ru": "Память с паспортами (источник, дата, доверие); export [файл], import <файл>, stats, restore <ключ>.",
    "kk": "Shura нені есінде сақтайтынын көрсету; export, import, stats, restore ішкі командалары.",
    "source": "shuracode"
   },
@@ -149,8 +149,8 @@
    "id": "rules",
    "name": "/rules",
    "category": "Memory",
-   "en": "Show the rules of the personal layer and their status",
-   "ru": "Показать правила личного слоя и их статус.",
+   "en": "Show personal rules, status and passports (source, date, trust)",
+   "ru": "Правила личного слоя, статус и паспорта (источник, дата, доверие).",
    "source": "shuracode",
    "kk": "(translation pending)"
   },

@@ -1,5 +1,5 @@
 ---
-description: Show what Shura remembers, or export/import/stats/restore the memory
+description: Show memories with source/date/trust; export [file], import <file>, stats, restore <key>
 ---
 $ARGUMENTS
 
@@ -8,7 +8,14 @@ everything by type), one line each with the passport the tool prints: (kind, who
 out memories that look outdated, duplicated or contradictory (memory_search marks contradictions with "!"), and
 offer to fix them with /fix. Do not change anything without my confirmation.
 
-Subcommands run the store's command line in the terminal (`shura memory ...` from the Shura checkout; the same
+When the gateway management tools are available, use them instead of the shell:
+- `export [file]`: memory_export returns JSON Lines including passports and journal. Show the returned text, or write it to the requested file outside the protected data directory.
+- `import <file>`: the user-command hook imports the named file with the user's authority; report its counts and do not call `memory_import_records` again. MCP imports are always external proposed quotes, even if the file has Shura export markers. Importing a Shura export with its confirmed passports is available only on this user command path.
+- `stats`: memory_stats reports counts and disk statistics.
+- `restore <key>`: the user-command hook restores the named record; report the result without calling `memory_restore` again. The model tool cannot restore records.
+Never write the database or MEMORY.md directly.
+
+Without the gateway management tools, subcommands run the store's command line in the terminal (`shura memory ...` from the Shura checkout; the same
 file is `gateway/lifelong_store.py`, so `python3 <shura>/gateway/lifelong_store.py ...` is the same thing) and
 report the result in one line:
 

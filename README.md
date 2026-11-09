@@ -209,3 +209,7 @@ The engine keeps its session history and caches in its standard folders (`~/.loc
 ## License
 
 MIT, see [LICENSE](LICENSE). OpenCode is MIT-licensed by its authors. See [NOTICE](NOTICE).
+
+## Optional lifelong memory integration
+
+The candidate gateway integration is off by default. It adds memory/rule passports, `memory: N records, rules: M, version V`, gateway-backed `/fix`, `/forget`, `/memory export|import|stats|restore`, and session-stable system instructions. `lifelongCapture` records explicit conversation signals as proposed only. Enable the matching gateway, MCP and plugin settings as described in the [configuration and command reference](docs/LIFELONG.md#english); existing sessions keep their frozen system text.

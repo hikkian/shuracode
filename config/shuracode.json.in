@@ -78,7 +78,8 @@
     ["@REPO_DIR@/plugin/visible-tests.ts", { "visibleTests": false }],
     ["@REPO_DIR@/plugin/model-harness.ts", { "harnessDir": "@REPO_DIR@/config/harness", "userHarnessDir": "~/.local/share/shura/skills" }],
     ["@REPO_DIR@/plugin/context-diet.ts", { "contextDiet": false }],
-    ["@REPO_DIR@/plugin/lifelong-capture.ts", { "lifelongCapture": false }]
+    ["@REPO_DIR@/plugin/lifelong-capture.ts", { "lifelongCapture": false }],
+    ["@REPO_DIR@/plugin/lifelong.ts", { "memoryEnabled": false, "lifelongCapture": false, "gateway": "http://127.0.0.1:8080" }]
   ],
   "instructions": ["~/.config/shuracode/AGENTS.md", "~/.local/share/shuracode/memory/MEMORY.md"],
   "agent": {
@@ -168,9 +169,14 @@
       "reboot*": "deny",
       "poweroff*": "deny",
       "systemctl poweroff*": "deny",
-      "systemctl reboot*": "deny"
+      "systemctl reboot*": "deny",
+      "*~/.local/share/shura*": "deny",
+      "*/.local/share/shura/*": "deny"
     },
-    "edit": "allow",
+    "edit": {
+      "*": "allow",
+      "**/.local/share/shura/**": "deny"
+    },
     "webfetch": "allow",
     "websearch": "allow"
   },
@@ -178,11 +184,13 @@
     "memory": {
       "type": "local",
       "command": ["python3", "@REPO_DIR@/mcp/memory.py"],
+      "environment": { "SHURACODE_MEMORY_ENABLED": "false", "SHURA_LIFELONG_URL": "http://127.0.0.1:8080" },
       "enabled": true
     },
     "rules": {
       "type": "local",
       "command": ["python3", "@REPO_DIR@/mcp/rules.py"],
+      "environment": { "SHURACODE_MEMORY_ENABLED": "false" },
       "enabled": true
     },
     "playwright": {

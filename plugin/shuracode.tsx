@@ -10,10 +10,14 @@ import { EFFORT_LEVELS, EFFORT_TEXT, budgetText, describeLevel, effortChip, pick
 import { homedir } from "node:os"
 import { join } from "node:path"
 
+import { gatewayCall, statusText, type MemorySummary } from "./lib/lifelong.ts"
+import { harnessKeyFor } from "./lib/model-harness.ts"
+
 const VERSION = "0.1.0"
 
 type Options = {
   gateway?: string // Shura gateway status URL; "" disables the model status
+  memoryEnabled?: boolean
   memory_dir?: string
 }
 
@@ -324,6 +328,15 @@ const tui: TuiPlugin = async (api, options) => {
   const memoryDir = opts.memory_dir ?? join(homedir(), ".local/share/shura/memory")
   const model = watchModel(gateway)
   const memories = watchMemory(memoryDir)
+  const [lifelong, setLifelong] = createSignal<MemorySummary | undefined>()
+  if (opts.memoryEnabled === true && gateway) {
+    const poll = async () => {
+      try { setLifelong(await gatewayCall(gateway, "summary", undefined, harnessKeyFor(model().detail) ?? "tiel")) }
+      catch { setLifelong(undefined) }
+    }
+    void poll()
+    setInterval(poll, 10000)
+  }
   const tip = TIPS[Math.floor(Math.random() * TIPS.length)]
   const theme = () => api.theme.current
   const engine = () => api.app.version
@@ -619,7 +632,7 @@ const tui: TuiPlugin = async (api, options) => {
             <box>
               <ModelBadge api={api} model={model} compact />
               <text fg={theme().textMuted}>
-                <span style={{ fg: theme().accent }}>◆</span> {memories()} {memories() === 1 ? "memory" : "memories"}
+                <span style={{ fg: theme().accent }}>◆</span> {opts.memoryEnabled === true ? statusText(lifelong()) : `${memories()} ${memories() === 1 ? "memory" : "memories"}`}
               </text>
               <text fg={theme().textMuted}>
                 <span style={{ fg: theme().primary }}>Shura</span>

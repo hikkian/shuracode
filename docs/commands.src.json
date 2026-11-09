@@ -25,7 +25,7 @@
    "name": "/rules",
    "category": "Memory",
    "en": "Show the rules of the personal layer and their status",
-   "ru": "Показать правила личного слоя и их статус.",
+   "ru": "Правила личного слоя, статус и паспорта (источник, дата, доверие).",
    "kk_pending": true,
    "source": "shuracode"
   },
@@ -52,7 +52,7 @@
    "name": "/memory",
    "category": "Memory",
    "en": "Show what ShuraCode remembers about you and your projects.",
-   "ru": "Показать, что помнит Shura; подкоманды export, import, stats, restore.",
+   "ru": "Память с паспортами (источник, дата, доверие); export [файл], import <файл>, stats, restore <ключ>.",
    "kk": "Shura нені есінде сақтайтынын көрсету; export, import, stats, restore ішкі командалары.",
    "source": "shuracode"
   },

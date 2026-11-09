@@ -52,7 +52,19 @@ info "node $(node --version), npm $(npm --version), $(python3 --version)"
 say "Config (~/.config/shuracode)"
 mkdir -p "$CONFIG/commands"
 tmp="$(mktemp)"
-render "$REPO_DIR/config/shuracode.json.in" > "$tmp"; put "$tmp" "$CONFIG/shuracode.json" || true
+if [ "${SHURACODE_MEMORY_ENABLED:-0}" = "1" ]; then
+  # Memory mode removes shell auto-allows that could write to the gateway or its protected data directory.
+  render "$REPO_DIR/config/shuracode.json.in" | sed \
+    -e '/"python \*": "allow",/d' \
+    -e '/"python3 \*": "allow",/d' \
+    -e '/"node \*": "allow",/d' \
+    -e '/"curl \*127.0.0.1\*": "allow",/d' \
+    -e '/"curl \*localhost\*": "allow",/d' \
+    -e 's/"memoryEnabled": false/"memoryEnabled": true/g' > "$tmp"
+else
+  render "$REPO_DIR/config/shuracode.json.in" > "$tmp"
+fi
+put "$tmp" "$CONFIG/shuracode.json" || true
 chmod 600 "$CONFIG/shuracode.json"
 render "$REPO_DIR/config/tui.json.in" > "$tmp"; put "$tmp" "$CONFIG/tui.json" || true
 rm -f "$tmp"

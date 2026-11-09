@@ -177,6 +177,14 @@ def est_tokens(text):
     return int(len(text) / CHARS_PER_TOKEN * TOKEN_MARGIN + 0.999)
 
 
+def visible_passport(r):
+    if os.environ.get('SHURACODE_MEMORY_ENABLED', '').lower() not in ('true', '1'):
+        return ''
+    source = escape_control(str(r['born_from'] or 'user_command')).replace('\n', ' ')
+    trust = 'confirmed by user' if r['status'] == 'enabled' else 'proposed'
+    return f" passport: (source: {source}, date: {r['created_at'][:10]}, trust: {trust})"
+
+
 def rule_form(r):
     n = r["notes"]
     flag = "\nflag: instruction-like (reads like an instruction to the model; the person must look at it)" if n.get("flagged") else ""
@@ -192,7 +200,7 @@ def rule_form(r):
         gate += f"\ngate skipped: {n['gate_skipped'].get('reason')}"
     if n.get("rolled_back"):
         gate += "\nrolled back: taken out of the layer by a rollback; enable brings it back"
-    return (f"RULE {n['key']} [{r['status']}]\nwhen: {n['when']}\ndo: {n['do']}\nwhy: {n['why']}\nborn_from: {r['born_from']}\n"
+    return (f"RULE {n['key']} [{r['status']}]{visible_passport(r)}\nwhen: {n['when']}\ndo: {n['do']}\nwhy: {n['why']}\nborn_from: {r['born_from']}\n"
             f"cost: {n['cost_words']} words\nmodel: {n['model']}, kind: {r['kind']}, cases: {len(r['cases'])}{flag}{merged}{gate}")
 
 
@@ -453,7 +461,7 @@ class Rules:
         for r in rows:
             n = r["notes"]
             flag = " !instruction-like" if n.get("flagged") else ""
-            lines.append(f"- {n['key']} [{r['status']}]{flag} ({n['model']}, {len(r['cases'])} case{'s' if len(r['cases']) != 1 else ''}, {n['cost_words']} words): {r['text']}")
+            lines.append(f"- {n['key']} [{r['status']}]{flag} ({n['model']}, {len(r['cases'])} case{'s' if len(r['cases']) != 1 else ''}, {n['cost_words']} words){visible_passport(r)}: {r['text']}")
         return "\n".join(lines)
 
     def show(self, key, model=None):
