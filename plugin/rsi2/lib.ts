@@ -29,8 +29,12 @@ export async function writeOnce(file: string, text: string): Promise<boolean> {
   return true
 }
 
+// The server plugin appends "[Today's date: ...] [Model: ...]" to the person's message (prefix-stability, cache);
+// it is not the person's own words, so memory capture and the other readers drop it.
+const SERVER_NOTE = /\n(?:\[Today's date: [^\]\n]*\])?(?: ?\[Model: [^\]\n]*\])?$/
+
 export function userText(parts: any[]): string {
-  return (parts ?? []).filter((p: any) => p?.type === "text").map((p: any) => String(p.text ?? "")).join("\n")
+  return (parts ?? []).filter((p: any) => p?.type === "text").map((p: any) => String(p.text ?? "").replace(SERVER_NOTE, "")).join("\n")
 }
 
 const EDIT_TOOLS = new Set(["edit", "write", "patch", "multiedit", "apply_patch"])

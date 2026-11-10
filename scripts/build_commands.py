@@ -46,8 +46,13 @@ def build():
         if i.pop("kk_pending", None) is True and not str(i.get("kk", "")).strip():
             i["kk"] = KK_PENDING          # a translation a native reader has not reviewed yet is not shown as Kazakh
         for lang in LANGS:
+            if lang == "kk" and i.get("kk_hidden"):
+                # Kazakh is held back until a native reader has checked it: the entry must not carry the text at all.
+                if "kk" in i:
+                    raise SystemExit(f"docs/commands.src.json: entry '{i['id']}' is kk_hidden but still has \"kk\" text")
+                continue
             if not str(i.get(lang, "")).strip():
-                raise SystemExit(f"docs/commands.src.json: entry '{i['id']}' has no \"{lang}\" text (every entry needs en, ru and kk)")
+                raise SystemExit(f"docs/commands.src.json: entry '{i['id']}' has no \"{lang}\" text (every entry needs en, ru and kk, unless kk_hidden)")
     items.sort(key=lambda i: (CATEGORY_ORDER.index(i["category"]), i.get("kind", "slash") != "slash", i["name"].lower()))
     return {"version": src["version"], "items": items}
 
@@ -62,7 +67,7 @@ def markdown(data):
         out += [f"## {cat} / {CATEGORY_RU[cat]} / {CATEGORY_KK[cat]}", "", "| Command | What it does | Что делает | Не істейді | Key | From |", "|---|---|---|---|---|---|"]
         for i in rows:
             only = f" ({', '.join(i['models'])} only)" if i.get("models") else ""
-            out.append(f"| `{i['name']}` | {i['en']}{only} | {i['ru']} | {i['kk']} | {('`' + i['key'] + '`') if i.get('key') else ''} | {SOURCE_NOTE[i['source']][0]} |")
+            out.append(f"| `{i['name']}` | {i['en']}{only} | {i['ru']} | {i.get('kk') or '—'} | {('`' + i['key'] + '`') if i.get('key') else ''} | {SOURCE_NOTE[i['source']][0]} |")
         out.append("")
     return "\n".join(out)
 

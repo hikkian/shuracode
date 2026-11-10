@@ -2,6 +2,11 @@
 // Rename only those self-references; documentation links and config paths stay as they are, because they are
 // real and still correct.
 import type { PluginModule } from "@opencode-ai/plugin"
+import { readdir, readFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { collectSkills, dateNote, renderSkills, replaceSkillsBlock, stableDateLine, stableModelLine, type SkillFile } from "./prefix-stability.ts"
+import { sessionHeader } from "./session-header.ts"
 
 const REPLACEMENTS: [RegExp, string][] = [
   [/Get help with using opencode\b/g, "Get help with using ShuraCode"],
@@ -11,31 +16,71 @@ const REPLACEMENTS: [RegExp, string][] = [
   [/from opencode docs at https:\/\/opencode\.ai/g, "from the engine documentation at https://opencode.ai"],
 ]
 
-// ShuraCode is the agent; the model is what it runs on. Name both, taking the model from the config, so the
-// answer to "who are you?" stays true if the model changes.
-export function rebrand(text: string, model?: string): string {
-  // the display name up to its first " (" or " — ": "Tiel-Coder 35B-A3B (local, 200K ctx) — faster, the default" -> "Tiel-Coder 35B-A3B"
-  const name = (model ?? "").split(/\s+[(—]/)[0].trim()
-  const intro = name ? `You are ShuraCode, running fully locally on the ${name} model,` : "You are ShuraCode,"
+// ShuraCode is the agent. The model's name is not in this sentence any more: it would change the start of the prompt at
+// every model switch (REPORT-CACHE1.md). The model is named in the user's message instead (see the chat.message hook).
+export function rebrand(text: string): string {
   return REPLACEMENTS.reduce((out, [pattern, value]) => out.replace(pattern, value), text)
-    .replace(/\bYou are opencode,/g, intro)
-    // Another loaded branding hook may already have renamed the engine before this one runs.
-    .replace(/\bYou are ShuraCode,(?! running fully locally on the )/g, intro)
+    .replace(/\bYou are opencode,/g, "You are ShuraCode,")
+}
+
+// Every SKILL.md under the skills folder, nested folders included (the engine reads the same places).
+async function scanSkillFiles(root: string, depth = 0): Promise<SkillFile[]> {
+  let entries
+  try {
+    entries = await readdir(root, { withFileTypes: true })
+  } catch {
+    return []
+  }
+  const found: SkillFile[] = []
+  for (const entry of entries) {
+    const full = path.join(root, entry.name)
+    if (entry.isDirectory() && depth < 4) found.push(...(await scanSkillFiles(full, depth + 1)))
+    else if (entry.isFile() && entry.name === "SKILL.md") found.push({ location: full, text: await readFile(full, "utf8").catch(() => "") })
+  }
+  return found
 }
 
 const plugin: PluginModule & { id: string } = {
   id: "shuracode-server",
-  server: async () => ({
-    "experimental.chat.system.transform": async (input, output) => {
-      // The engine may expose only the stable model id here (the harness plugin keys on it too).
-      // Prefer its configured display name, then fall back so the identity never loses the model.
-      const model = input.model?.name?.trim() || input.model?.id
-      // edit in place: the engine keeps using the same array after the hook returns
-      output.system.forEach((text, i) => {
-        output.system[i] = rebrand(text, model)
-      })
-    },
-  }),
+  server: async (_input, options) => {
+    const root = (options as { skillsRoot?: string } | undefined)?.skillsRoot ?? path.join(os.homedir(), ".agents", "skills")
+    // The skill list is read once per process, so it cannot change between turns (see prefix-stability.ts).
+    let skills: Promise<string> | undefined
+    // The date and the model go into a user message when they change; the message keeps them, so they never move.
+    const noted = new Map<string, { date: string; model: string }>()
+    // The note is added to the user's own text: the engine assigns ids to parts before this hook runs, so a new part
+    // made here would not be valid (it failed with UnknownError in the bisect, REPORT-CACHE2.md).
+    const note = (text: string, parts: { type: string; text?: string }[]) => {
+      const first = parts.find((part) => part.type === "text")
+      if (first) first.text = `${first.text ?? ""}\n${text}`
+    }
+    return {
+      "experimental.chat.system.transform": async (_input, output) => {
+        skills ??= scanSkillFiles(root).then((files) => renderSkills(collectSkills(files)))
+        const list = await skills
+        // edit in place: the engine keeps using the same array after the hook returns
+        output.system.forEach((text, i) => {
+          output.system[i] = replaceSkillsBlock(stableModelLine(stableDateLine(rebrand(text))), list)
+        })
+      },
+      // Session cache: the gateway keys its snapshot by this header (SESS2b). Set per engine session, no personal data.
+      "chat.headers": async (input, output) => {
+        const id = sessionHeader(String(input.sessionID ?? ""))
+        if (id) output.headers["X-Shura-Session"] = id
+      },
+      "chat.message": async (input, output) => {
+        const date = dateNote(new Date())
+        // the same id the engine itself prints in its prompt: provider/model
+        const model = input.model?.modelID ? `${input.model.providerID ?? ""}${input.model.providerID ? "/" : ""}${input.model.modelID}`.trim() : ""
+        const before = noted.get(input.sessionID) ?? { date: "", model: "" }
+        const parts: string[] = []
+        if (before.date !== date) parts.push(`[${date}]`)
+        if (model && before.model !== model) parts.push(`[Model: ${model}]`)
+        noted.set(input.sessionID, { date, model: model || before.model })
+        if (parts.length) note(parts.join(" "), output.parts as { type: string; text?: string }[])
+      },
+    }
+  },
 }
 
 export default plugin

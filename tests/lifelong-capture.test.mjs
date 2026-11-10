@@ -369,3 +369,11 @@ test("the transcript limit keeps the end of the run and says that something was 
     assert.match(await r.tool("capture_task"), /no start snapshot/, "the deleted session has no log any more")
   } finally { await r.cleanup() }
 })
+
+import { userText as __userText } from "../plugin/rsi2/lib.ts"
+test("the server plugin's date/model note is not part of the person's text", () => {
+  assert.equal(__userText([{ type: "text", text: "Нет, используй pytest.\n[Today's date: Tue Nov 10 2026] [Model: shura/tiel]" }]), "Нет, используй pytest.")
+  assert.equal(__userText([{ type: "text", text: "hi\n[Model: shura/tiel]" }]), "hi")
+  assert.equal(__userText([{ type: "text", text: "hi\n" }]), "hi")
+  assert.equal(__userText([{ type: "text", text: "a [b]" }]), "a [b]")
+})
