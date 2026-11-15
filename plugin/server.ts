@@ -33,6 +33,7 @@ async function scanSkillFiles(root: string, depth = 0): Promise<SkillFile[]> {
   }
   const found: SkillFile[] = []
   for (const entry of entries) {
+    if (entry.isDirectory() && entry.name === ".trash") continue
     const full = path.join(root, entry.name)
     if (entry.isDirectory() && depth < 4) found.push(...(await scanSkillFiles(full, depth + 1)))
     else if (entry.isFile() && entry.name === "SKILL.md") found.push({ location: full, text: await readFile(full, "utf8").catch(() => "") })
@@ -43,7 +44,8 @@ async function scanSkillFiles(root: string, depth = 0): Promise<SkillFile[]> {
 const plugin: PluginModule & { id: string } = {
   id: "shuracode-server",
   server: async (_input, options) => {
-    const root = (options as { skillsRoot?: string } | undefined)?.skillsRoot ?? path.join(os.homedir(), ".agents", "skills")
+    const given = (options as { skillsRoot?: string } | undefined)?.skillsRoot
+    const root = given === undefined ? path.join(os.homedir(), ".local", "share", "shura", "skills") : given.startsWith("~/") ? path.join(os.homedir(), given.slice(2)) : given
     // The skill list is read once per process, so it cannot change between turns (see prefix-stability.ts).
     let skills: Promise<string> | undefined
     // The date and the model go into a user message when they change; the message keeps them, so they never move.

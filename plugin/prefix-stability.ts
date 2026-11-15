@@ -31,11 +31,11 @@ export function frontmatter(text: string): { name?: string; description?: string
 
 const inTrash = (location: string) => location.includes("/.trash/")
 
-// One entry per skill name, sorted by name. A copy outside .trash wins; between two copies of the same kind the
-// smaller path wins. The result does not depend on the order in which the files were found.
+// One entry per skill name, sorted by name. Files under .trash are ignored (a skill that exists only there is not
+// listed); between two copies the smaller path wins. The result does not depend on the order in which the files were found.
 export function collectSkills(files: SkillFile[]): SkillEntry[] {
   const chosen = new Map<string, SkillEntry>()
-  for (const file of files) {
+  for (const file of files.filter((f) => !inTrash(f.location))) {
     const { name, description } = frontmatter(file.text)
     if (!name) continue
     const entry: SkillEntry = { name, description: description ?? "", location: file.location }
@@ -44,10 +44,7 @@ export function collectSkills(files: SkillFile[]): SkillEntry[] {
       chosen.set(name, entry)
       continue
     }
-    const better = inTrash(current.location) !== inTrash(entry.location)
-      ? inTrash(current.location)
-      : entry.location < current.location
-    if (better) chosen.set(name, entry)
+    if (entry.location < current.location) chosen.set(name, entry)
   }
   return [...chosen.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
 }

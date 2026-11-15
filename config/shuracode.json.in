@@ -69,7 +69,7 @@
   "model": "tiel-local/tiel-coder",
   "small_model": "tiel-local/tiel-coder",
   "plugin": [
-    "@REPO_DIR@/plugin/server.ts",
+    ["@REPO_DIR@/plugin/server.ts", { "skillsRoot": "~/.local/share/shura/skills" }],
     ["@REPO_DIR@/plugin/reliability/completion-gate.ts", { "completionGate": false }],
     ["@REPO_DIR@/plugin/reliability/soft-edit.ts", { "softEdit": false }],
     ["@REPO_DIR@/plugin/reliability/loop-detector.ts", { "loopDetector": false }],

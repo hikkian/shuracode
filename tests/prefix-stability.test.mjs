@@ -16,7 +16,7 @@ test("frontmatter reads plain, quoted and folded descriptions and skips files wi
   assert.deepEqual(frontmatter("no frontmatter here"), {})
 })
 
-test("collectSkills keeps one entry per name, prefers a copy outside .trash, and sorts by name", () => {
+test("collectSkills keeps one entry per name, ignores .trash copies, and sorts by name", () => {
   const files = [
     skill("pptx", "slides", "/home/u/.agents/skills/.trash/171-1/pptx/SKILL.md"),
     skill("pptx", "slides", "/home/u/.agents/skills/synced/abc/pptx/SKILL.md"),
@@ -24,10 +24,10 @@ test("collectSkills keeps one entry per name, prefers a copy outside .trash, and
     skill("morning", "brief", "/home/u/.agents/skills/synced/abc/morning/SKILL.md"),
   ]
   const picked = collectSkills(files)
-  assert.deepEqual(picked.map((e) => e.name), ["chrome-browser", "morning", "pptx"])
+  assert.deepEqual(picked.map((e) => e.name), ["morning", "pptx"])
   assert.equal(picked.find((e) => e.name === "pptx").location, "/home/u/.agents/skills/synced/abc/pptx/SKILL.md")
-  // a name that exists only in .trash is still listed (its copy is the only one)
-  assert.equal(picked[0].location, "/home/u/.agents/skills/.trash/171-2/chrome-browser/SKILL.md")
+  // a name that exists only in .trash is not listed
+  assert.ok(!picked.some((e) => e.name === "chrome-browser"))
 })
 
 test("collectSkills does not depend on the order the files were found in", () => {
@@ -141,4 +141,52 @@ test("the engine's model line is the same for every model, so a switch does not 
   const main = "Notes.\nYou are powered by the model named tiel-coder. The exact model ID is tiel-local/tiel-coder\nHere is"
   assert.equal(stableModelLine(apex), stableModelLine(main))
   assert.ok(!stableModelLine(main).includes("tiel-coder"))
+})
+
+test("an empty skillsRoot gives an empty skill block with no items", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "shuracode-empty-"))
+  try {
+    const hooks = await server.server({}, { skillsRoot: root })
+    const out = { system: systemTexts("<available_skills>\n</available_skills>") }
+    await hooks["experimental.chat.system.transform"]({ model: { name: "tiel" } }, out)
+    assert.ok(out.system[1].includes("<available_skills>"))
+    assert.equal((out.system[1].match(/<skill>/g) ?? []).length, 0)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test("without skillsRoot the plugin does not read ~/.agents/skills", async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "shuracode-home-"))
+  const oldHome = process.env.HOME
+  try {
+    await mkdir(path.join(home, ".agents", "skills", "leak"), { recursive: true })
+    await writeFile(path.join(home, ".agents", "skills", "leak", "SKILL.md"), "---\nname: leak\ndescription: old\n---\n")
+    await mkdir(path.join(home, ".local", "share", "shura", "skills"), { recursive: true })
+    process.env.HOME = home
+    const hooks = await server.server({}, {})
+    const out = { system: systemTexts("<available_skills>\n</available_skills>") }
+    await hooks["experimental.chat.system.transform"]({ model: { name: "tiel" } }, out)
+    assert.ok(!out.system[1].includes("leak"))
+    assert.equal((out.system[1].match(/<skill>/g) ?? []).length, 0)
+  } finally {
+    if (oldHome === undefined) delete process.env.HOME
+    else process.env.HOME = oldHome
+    await rm(home, { recursive: true, force: true })
+  }
+})
+
+test("a skill inside .trash under skillsRoot is not listed, the same skill outside .trash is", async () => {
+  await withSkills(async (root, put) => {
+    await put(".trash/9-9/only-trash/SKILL.md", "only-trash", "gone")
+    await put("kept/dup/SKILL.md", "dup", "kept")
+    await put(".trash/9-9/dup/SKILL.md", "dup", "kept")
+    const hooks = await server.server({}, { skillsRoot: root })
+    const out = { system: systemTexts("<available_skills>\n</available_skills>") }
+    await hooks["experimental.chat.system.transform"]({ model: { name: "tiel" } }, out)
+    const list = out.system[1]
+    assert.ok(!list.includes("only-trash"))
+    assert.ok(!list.includes("/.trash/"))
+    assert.equal((list.match(/<name>dup<\/name>/g) ?? []).length, 1)
+  })
 })
