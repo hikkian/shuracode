@@ -92,6 +92,26 @@ export function bar(fill: number | null, cells = 20): string | null {
 
 const gb = (mib: unknown) => (finite(mib) ? (mib / 1024).toFixed(1) : null)
 
+// Session start: requests answered before this ShuraCode started are not counted in the average.
+export const SESSION_START = Date.now() / 1000
+
+// Average answer speed over this session, weighted by tokens (sum of tokens / sum of decode time), so short
+// answers do not skew it. Uses the gateway's recent-requests list; null when there is nothing to average.
+export function sessionSpeed(requests: unknown, since = SESSION_START): number | null {
+  if (!Array.isArray(requests)) return null
+  let tokens = 0
+  let seconds = 0
+  for (const r of requests) {
+    const at = get(r, "at")
+    const n = get(r, "completion_tokens")
+    const v = get(r, "decode_per_second")
+    if (get(r, "status") !== 200 || !finite(at) || at < since || !finite(n) || !finite(v) || n <= 0 || v <= 0) continue
+    tokens += n
+    seconds += n / v
+  }
+  return seconds > 0 ? tokens / seconds : null
+}
+
 // One row per number the panel shows. A capability the gateway reports as false, or a missing number, gives
 // "n/a" and no bar.
 export function rowsOf(s: Monitor): Row[] {
@@ -100,7 +120,9 @@ export function rowsOf(s: Monitor): Row[] {
   const gpu = get(s, "gpu")
   const mem = get(s, "memory")
   const cpu = get(s, "cpu")
-  const speed = get(get(s, "last_request"), "decode_per_second")
+  const last = get(get(s, "last_request"), "decode_per_second")
+  const avg = sessionSpeed(get(s, "_requests"))
+  const speed = avg ?? last
   const context = get(get(s, "context"), "used_percent")
   const gpuCaps = has("gpu_nvidia") || has("gpu_amd") || has("gpu_intel")
   const vramOk = gpuCaps && finite(get(gpu, "free_mib")) && finite(get(gpu, "total_mib"))
@@ -109,7 +131,11 @@ export function rowsOf(s: Monitor): Row[] {
   const cpuTemp = has("cpu_temp") ? get(cpu, "temperature_c") : undefined
   const zram = has("zram") ? get(mem, "zram_used_percent") : undefined
   return [
-    { label: "Speed", text: num(speed, 1, " tok/s"), bar: bar(ratio(speed, SPEED_FULL)) },
+    {
+      label: avg !== null ? "Speed avg" : "Speed",
+      text: num(speed, 1, " tok/s") + (avg !== null && finite(last) ? ` · last ${last.toFixed(1)}` : ""),
+      bar: bar(ratio(speed, SPEED_FULL)),
+    },
     { label: "Context", text: num(context, 0, "%"), bar: bar(ratio(context, 100)) },
     vramOk
       ? { label: "VRAM", text: `free ${gb(gpu.free_mib)} of ${gb(gpu.total_mib)} GB`, bar: bar(ratio(gpu.used_mib, gpu.total_mib)) }
@@ -137,7 +163,7 @@ export function viewOf(reading: Reading | null): View {
   const tone = toneOf(get(health, "level"))
   const model = String(get(get(s, "header"), "model") || "model")
   const rows = rowsOf(s)
-  const speed = rows[0].text
+  const speed = rows[0].text.split(" · ")[0]
   const context = rows[1].text
   const vram = rows[2].text === "n/a" ? "" : " · VRAM " + rows[2].text
   return {
@@ -192,7 +218,16 @@ export function createPoller(opts: PollerOptions): Poller {
     try {
       const res = await doFetch(opts.url, { signal: ctl.signal, headers: { accept: "application/json" } })
       const body = await res.text()
-      if (inFlight === ctl) emit(parseReading(res.ok, body))
+      const reading = parseReading(res.ok, body)
+      if (reading.kind === "ok" && opts.url.endsWith("/monitor/api/state")) {
+        try {
+          const r2 = await doFetch(opts.url.replace(/state$/, "requests"), { signal: ctl.signal, headers: { accept: "application/json" } })
+          if (r2.ok) reading.state._requests = JSON.parse(await r2.text())
+        } catch {
+          // the average is optional: without the list the panel shows the last answer's speed
+        }
+      }
+      if (inFlight === ctl) emit(reading)
     } catch {
       if (inFlight === ctl) emit({ kind: "offline", reason: "unreachable" })
     } finally {

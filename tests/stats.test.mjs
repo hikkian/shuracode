@@ -207,7 +207,8 @@ test("with a panel open the gateway is read once per second: a first fetch at on
   poller.retain()
   await wait(3200)
   poller.release()
-  assert.ok(gw.hits.length >= 3 && gw.hits.length <= 5, `requests in 3.2 s: ${gw.hits.length}`)
+  const states = gw.hits.filter((h) => h.endsWith("/state")).length // each tick also reads /requests for the average
+  assert.ok(states >= 3 && states <= 5, `state requests in 3.2 s: ${states}`)
   assert.equal(stats.viewOf(poller.latest()).tone, "green")
 })
 
@@ -219,7 +220,7 @@ test("with the panel closed, requests stop: none after the first fetch, over 5 s
   await wait(300)
   poller.release()
   const atClose = gw.hits.length
-  assert.equal(atClose, 1, "the first fetch happens at once")
+  assert.equal(gw.hits.filter((h) => h.endsWith("/state")).length, 1, "the first fetch happens at once")
   await wait(5000)
   assert.equal(gw.hits.length - atClose, 0, "requests made in 5 s with the panel closed")
 })
@@ -338,4 +339,17 @@ test("the banner follows the gateway through red and back, and goes when the sta
   assert.ok(reds.every((v) => v.banner === "GPU memory or temperature is critical"))
   assert.equal(seen.at(-1).tone, "green")
   assert.equal(seen.at(-1).banner, null)
+})
+
+test("sessionSpeed: token-weighted average of this session's answers, older answers and errors left out", () => {
+  const since = 1000
+  const reqs = [
+    { at: 900, status: 200, completion_tokens: 1000, decode_per_second: 10 }, // before the session
+    { at: 1001, status: 200, completion_tokens: 100, decode_per_second: 100 }, // 1 s
+    { at: 1002, status: 200, completion_tokens: 300, decode_per_second: 50 }, // 6 s
+    { at: 1003, status: 500, completion_tokens: 50, decode_per_second: 5 }, // error
+  ]
+  assert.equal(stats.sessionSpeed(reqs, since).toFixed(2), (400 / 7).toFixed(2))
+  assert.equal(stats.sessionSpeed([], since), null)
+  assert.equal(stats.sessionSpeed("x", since), null)
 })
