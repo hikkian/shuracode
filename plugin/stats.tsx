@@ -106,12 +106,13 @@ export function lastSpeed(requests: unknown): number | null {
   return null
 }
 
-// Session start: requests answered before this ShuraCode started are not counted in the average.
-export const SESSION_START = Date.now() / 1000
+// The average covers the answers of the last hour (the gateway keeps a bounded recent list), so it shows at once
+// after a restart instead of waiting for the first answer.
+export const AVG_WINDOW_S = 3600
 
-// Average answer speed over this session, weighted by tokens (sum of tokens / sum of decode time), so short
+// Average answer speed over the recent answers, weighted by tokens (sum of tokens / sum of decode time), so short
 // answers do not skew it. Uses the gateway's recent-requests list; null when there is nothing to average.
-export function sessionSpeed(requests: unknown, since = SESSION_START): number | null {
+export function sessionSpeed(requests: unknown, since = Date.now() / 1000 - AVG_WINDOW_S): number | null {
   if (!Array.isArray(requests)) return null
   let tokens = 0
   let seconds = 0
