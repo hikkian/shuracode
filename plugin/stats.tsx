@@ -92,6 +92,20 @@ export function bar(fill: number | null, cells = 20): string | null {
 
 const gb = (mib: unknown) => (finite(mib) ? (mib / 1024).toFixed(1) : null)
 
+// Answers shorter than this (warm-up calls, 1-token probes) say nothing about speed and are left out.
+const MIN_TOKENS = 8
+
+// Speed of the last real answer in the gateway's list (newest first), or null.
+export function lastSpeed(requests: unknown): number | null {
+  if (!Array.isArray(requests)) return null
+  for (const r of requests) {
+    const n = get(r, "completion_tokens")
+    const v = get(r, "decode_per_second")
+    if (get(r, "status") === 200 && finite(n) && n >= MIN_TOKENS && finite(v) && v > 0) return v
+  }
+  return null
+}
+
 // Session start: requests answered before this ShuraCode started are not counted in the average.
 export const SESSION_START = Date.now() / 1000
 
@@ -105,7 +119,7 @@ export function sessionSpeed(requests: unknown, since = SESSION_START): number |
     const at = get(r, "at")
     const n = get(r, "completion_tokens")
     const v = get(r, "decode_per_second")
-    if (get(r, "status") !== 200 || !finite(at) || at < since || !finite(n) || !finite(v) || n <= 0 || v <= 0) continue
+    if (get(r, "status") !== 200 || !finite(at) || at < since || !finite(n) || !finite(v) || n < MIN_TOKENS || v <= 0) continue
     tokens += n
     seconds += n / v
   }
@@ -120,7 +134,8 @@ export function rowsOf(s: Monitor): Row[] {
   const gpu = get(s, "gpu")
   const mem = get(s, "memory")
   const cpu = get(s, "cpu")
-  const last = get(get(s, "last_request"), "decode_per_second")
+  const lr = get(get(s, "last_request"), "decode_per_second")
+  const last = lastSpeed(get(s, "_requests")) ?? (finite(lr) && lr > 0 ? lr : null)
   const avg = sessionSpeed(get(s, "_requests"))
   const speed = avg ?? last
   const context = get(get(s, "context"), "used_percent")

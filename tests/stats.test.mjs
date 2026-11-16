@@ -353,3 +353,12 @@ test("sessionSpeed: token-weighted average of this session's answers, older answ
   assert.equal(stats.sessionSpeed([], since), null)
   assert.equal(stats.sessionSpeed("x", since), null)
 })
+
+test("lastSpeed: a warm-up call (1 token, 0 tok/s) does not hide the last real answer", () => {
+  const reqs = [
+    { at: 3, status: 200, completion_tokens: 1, decode_per_second: 0 },
+    { at: 2, status: 200, completion_tokens: 69, decode_per_second: 69.7 },
+  ]
+  assert.equal(stats.lastSpeed(reqs), 69.7)
+  assert.equal(stats.lastSpeed([{ at: 1, status: 200, completion_tokens: 1, decode_per_second: 0 }]), null)
+})
