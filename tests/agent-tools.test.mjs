@@ -86,7 +86,7 @@ test("render executes Chromium through the shura-qa Playwright and returns probl
 })
 
 test("frames executes ffmpeg and returns frames with an ffprobe summary", async () => {
-  const src = "/home/alisher/Projects/shura-integration/bench/agentic-eval/tasks_general/gm_concat/general-01/start/in.mp4"
+  const src = path.join(process.env.SHURA_INTEGRATION_ROOT ?? path.join(os.homedir(), "Projects", "shura-integration"), "bench/agentic-eval/tasks_general/gm_concat/general-01/start/in.mp4")
   const have = await access(src).then(() => true, () => false)
   if (!have) return
   const dir = await mkdtemp(path.join(os.tmpdir(), "agent-tools-"))

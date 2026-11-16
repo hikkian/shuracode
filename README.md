@@ -6,7 +6,7 @@
 
 **A private, local AI coding agent for the terminal, with a memory that lasts across sessions.**
 
-English · [Русский](README.ru.md) · [Қазақша](README.kz.md)
+English · [Русский](README.ru.md)
 
 </div>
 
@@ -75,12 +75,12 @@ adds two tools, off by default:
   to action by its label, whatever its markup (`<a>`, `<button>`, `role=button`), and so does the tool.
 - `frames` — a video becomes an ffprobe summary (duration, streams, codecs, size) and 3–6 PNG frames at chosen times.
 
-Enable it in `shuracode.json` with a flag, next to the other plugins:
+Enable it in `~/.config/shuracode/shuracode.json` with a flag, next to the other plugins (`install.sh` already writes the first entry with your clone path; replace `<path to ...>` with the real absolute paths on your machine):
 
 ```json
 "plugin": [
-  "/home/alisher/Projects/shuracode/plugin/server.ts",
-  ["/home/alisher/Projects/shuracode-integration/plugin/agent-tools/agent-tools.ts", { "agentTools": true }]
+  "<path to shuracode>/plugin/server.ts",
+  ["<path to shura>/plugin/agent-tools/agent-tools.ts", { "agentTools": true }]
 ]
 ```
 

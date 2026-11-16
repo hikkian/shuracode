@@ -110,7 +110,7 @@ class CaptureOnEngine(unittest.TestCase):
 @unittest.skipUnless(ENGINE.exists(), "no engine installed")
 class SignalsOnEngine(unittest.TestCase):
     def test_correction_capture_through_real_engine_is_proposed_only(self):
-        gateway_root = Path(os.environ.get('SHURA_INTEGRATION_ROOT', '/home/alisher/Projects/shura-integration'))
+        gateway_root = Path(os.environ.get('SHURA_INTEGRATION_ROOT', str(Path.home()/'Projects'/'shura-integration')))
         sys.path.insert(0, str(gateway_root/'tests/support'))
         from gateway_harness import GatewayHarness
         with GatewayHarness(guardian={'memoryEnabled':True,'lifelongCapture':True}) as gw:
