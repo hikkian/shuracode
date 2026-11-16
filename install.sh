@@ -150,6 +150,24 @@ else
   info "OpenCode $current (up to date with this install)"
 fi
 
+# ------------------------------------------------------------------------------------------- UI patch
+# Compaction: hide the summary message from the chat and make the context counter honest (ui-patch/README.md).
+# Same-length byte edits on a copy of the engine; if the engine version does not match, keep the plain engine.
+say "UI patch"
+cur="$(cat "$DATA/engine/current")"; edir="$DATA/engine/$cur"; esrc="$(readlink -f "$edir/bin")"
+relink() { ln -sfn "$1" "$DATA/libexec/.shuracode.$$" && mv -Tf "$DATA/libexec/.shuracode.$$" "$DATA/libexec/shuracode"; }
+mkdir -p "$edir/patched"
+uilog="$(mktemp)"
+if python3 "$REPO_DIR/ui-patch/patch_ui.py" "$esrc" "$edir/patched/shuracode" >"$uilog" 2>&1 \
+   && "$edir/patched/shuracode" --version >>"$uilog" 2>&1; then
+  relink "$edir/patched/shuracode"
+  info "applied to OpenCode $cur"
+else
+  rm -rf "$edir/patched"; relink "$esrc"
+  info "does not match OpenCode $cur - using the plain engine ($(tail -n 1 "$uilog" | cut -c1-120))"
+fi
+rm -f "$uilog"
+
 # ------------------------------------------------------------------------------------------ command
 say "Command"
 mkdir -p "$HOME/.local/bin"
