@@ -7,7 +7,7 @@ import { RGBA, TextAttributes } from "@opentui/core"
 import { createMemo, createRoot, createSignal, createEffect, For, Index, onCleanup, onMount, Show } from "solid-js"
 import { applyThinkingDefault, type KvLike } from "./thinking-default"
 import { spawn } from "node:child_process"
-import { readdirSync, readFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { EFFORT_LEVELS, EFFORT_TEXT, budgetText, describeLevel, effortChip, pickerTitle, rereadNeeded, titleFor, type EffortStatus } from "./lib/effort.ts"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -174,6 +174,9 @@ function watchModel(url: string) {
 function watchMemory(dir: string) {
   const count = () => {
     try {
+      // LL1: records live in the knowledge store; its generated index MEMORY.md lists one "- " line per record.
+      const index = join(dir, "MEMORY.md")
+      if (existsSync(index)) return readFileSync(index, "utf8").split("\n").filter((l) => l.startsWith("- ")).length
       return readdirSync(dir).filter((f) => f.endsWith(".md") && f !== "MEMORY.md").length
     } catch {
       return 0
